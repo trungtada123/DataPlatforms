@@ -1,0 +1,184 @@
+"""Intent classifier cho orchestration market-first."""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime, timezone
+from typing import Any
+
+import google.generativeai as genai
+
+from ..config import Settings, get_settings
+from .contracts import IntentPlan, NormalizedQueryRequest, ToolName
+from .fallback_rules import build_rule_based_intent_plan
+
+
+CLASSIFIER_PROMPT_TEMPLATE = """
+You are an intent classifier for a stock-market orchestration service.
+
+Current date: {today}
+
+Supported tools:
+- market
+- news
+- financial_reports
+
+For this phase, prefer `market` whenever the user asks about price, ticker, technical indicators,
+historical comparison, intraday status, or market-data analysis.
+
+Return valid JSON only with this shape:
+{{
+  "primary_intent": "market|unknown",
+  "normalized_query": "...",
+  "tools_to_use": ["market"],
+  "tool_queries": {{"market": "..."}},
+  "entities": {{
+    "tickers": ["ACB"],
+    "company_names": ["Asia Commercial Bank"],
+    "intraday": true,
+    "historical": false,
+    "technical_analysis": false,
+    "comparison": false
+  }},
+  "time_constraints": {{
+    "explicit_dates": [],
+    "date_range": [],
+    "relative_periods": []
+  }},
+  "analysis_requirements": {{
+    "intraday": true,
+    "historical": false,
+    "technical_analysis": false,
+    "comparison": false,
+    "health_debug": false
+  }},
+  "reasoning_brief": "short explanation",
+  "confidence": 0.0
+}}
+
+User query:
+{question}
+"""
+
+
+class IntentClassifier:
+    """Phân loại intent và tạo IntentPlan cho router.
+
+    Args:
+        settings: Settings override nếu caller muốn tái sử dụng config hiện có.
+    """
+
+    def __init__(self, settings: Settings | None = None) -> None:
+        self.settings = settings or get_settings()
+
+    def classify(self, request: NormalizedQueryRequest | str) -> IntentPlan:
+        """Classify một query thành IntentPlan.
+
+        Args:
+            request: Request chuẩn hóa hoặc raw string.
+
+        Returns:
+            IntentPlan dùng cho router.
+        """
+
+        normalized_request = request if isinstance(request, NormalizedQueryRequest) else NormalizedQueryRequest(question=request)
+        fallback_plan = build_rule_based_intent_plan(normalized_request.question)
+
+        if not self.settings.google_api_key:
+            return fallback_plan
+
+        try:
+            return self._classify_with_gemini(normalized_request.question, fallback_plan)
+        except Exception:
+            fallback_plan.classifier_mode = "fallback_rule_based"
+            return fallback_plan
+
+    def _classify_with_gemini(self, question: str, fallback_plan: IntentPlan) -> IntentPlan:
+        """Dùng Gemini để enrich thêm plan khi có model khả dụng."""
+
+        genai.configure(api_key=self.settings.google_api_key)
+        model = genai.GenerativeModel(
+            model_name=self.settings.gemini_model,
+            generation_config={"temperature": 0.0},
+        )
+        now_tz = getattr(self.settings, "tzinfo", timezone.utc)
+        prompt = CLASSIFIER_PROMPT_TEMPLATE.format(
+            today=datetime.now(now_tz).date().isoformat(),
+            question=question,
+        )
+        response = model.generate_content(prompt)
+        payload = self._extract_json_payload(response.text or "")
+        return self._plan_from_payload(question, payload, fallback_plan)
+
+    @staticmethod
+    def _extract_json_payload(text: str) -> dict[str, Any]:
+        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if not match:
+            raise ValueError("Classifier model did not return JSON.")
+        return json.loads(match.group(0))
+
+    @staticmethod
+    def _normalize_tools(raw_tools: list[Any], fallback_plan: IntentPlan) -> list[ToolName]:
+        tools: list[ToolName] = []
+        for raw_tool in raw_tools:
+            try:
+                tool = ToolName(str(raw_tool))
+            except ValueError:
+                continue
+            if tool not in tools:
+                tools.append(tool)
+
+        if tools:
+            return tools
+        return fallback_plan.tools_to_use
+
+    def _plan_from_payload(
+        self,
+        question: str,
+        payload: dict[str, Any],
+        fallback_plan: IntentPlan,
+    ) -> IntentPlan:
+        tools_to_use = self._normalize_tools(payload.get("tools_to_use") or [], fallback_plan)
+        normalized_query = str(payload.get("normalized_query") or fallback_plan.normalized_query)
+
+        tool_queries = dict(fallback_plan.tool_queries)
+        raw_tool_queries = payload.get("tool_queries") or {}
+        for key, value in raw_tool_queries.items():
+            if value:
+                tool_queries[str(key)] = str(value)
+        if tools_to_use and ToolName.MARKET.value not in tool_queries:
+            tool_queries[ToolName.MARKET.value] = normalized_query
+
+        entities = dict(fallback_plan.entities)
+        entities.update(payload.get("entities") or {})
+
+        analysis_requirements = dict(fallback_plan.analysis_requirements)
+        analysis_requirements.update(payload.get("analysis_requirements") or {})
+
+        time_constraints = dict(fallback_plan.time_constraints)
+        time_constraints.update(payload.get("time_constraints") or {})
+
+        primary_intent = str(payload.get("primary_intent") or fallback_plan.primary_intent)
+        if primary_intent not in {"market", "unknown"}:
+            primary_intent = fallback_plan.primary_intent
+
+        confidence = payload.get("confidence", fallback_plan.confidence)
+        try:
+            normalized_confidence = float(confidence)
+        except (TypeError, ValueError):
+            normalized_confidence = fallback_plan.confidence
+
+        return IntentPlan(
+            original_query=question,
+            normalized_query=normalized_query,
+            tools_to_use=tools_to_use,
+            tool_queries=tool_queries,
+            entities=entities,
+            time_constraints=time_constraints,
+            analysis_requirements=analysis_requirements,
+            reasoning_brief=str(payload.get("reasoning_brief") or fallback_plan.reasoning_brief),
+            primary_intent=primary_intent,
+            classifier_mode="gemini",
+            confidence=normalized_confidence,
+        )

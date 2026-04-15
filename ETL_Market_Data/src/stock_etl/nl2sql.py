@@ -115,6 +115,15 @@ def _format_scalar(value: Any) -> str:
     return str(value)
 
 
+def _safe_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _extract_symbol_from_question(question: str) -> str | None:
     match = re.search(r"\b([A-Z]{3,5})\b", question.upper())
     return match.group(1) if match else None
@@ -218,10 +227,15 @@ def _local_answer(question: str, rows: list[dict[str, Any]]) -> str:
     if {"start_price", "end_price", "change_pct"} <= set(first):
         start_price = _format_scalar(first.get("start_price"))
         end_price = _format_scalar(first.get("end_price"))
-        change_pct = float(first.get("change_pct"))
+        change_pct = _safe_float(first.get("change_pct"))
         ticker = first.get("ticker") or "mã này"
         current_date = first.get("current_date") or first.get("end_date") or "hiện tại"
         base_date = first.get("base_date") or "đầu kỳ"
+        if change_pct is None:
+            return (
+                f"Đã tìm thấy dữ liệu giá cho {ticker} từ {base_date} đến {current_date}, "
+                "nhưng chưa đủ dữ liệu để tính phần trăm thay đổi."
+            )
         direction = "tăng" if change_pct >= 0 else "giảm"
         return (
             f"Giá cổ phiếu {ticker} đã {direction} từ {start_price} vào {base_date} "
@@ -229,8 +243,13 @@ def _local_answer(question: str, rows: list[dict[str, Any]]) -> str:
         ).replace("lên/xuống", "lên" if change_pct >= 0 else "xuống")
 
     if "percentage_change" in first:
-        ticker = _extract_symbol_from_question(question) or "mã này"
-        percentage_change = float(first["percentage_change"])
+        ticker = first.get("ticker") or _extract_symbol_from_question(question) or "mã này"
+        percentage_change = _safe_float(first.get("percentage_change"))
+        if percentage_change is None:
+            return (
+                f"Đã tìm thấy dữ liệu cho {ticker}, nhưng chưa đủ "
+                "giá trị để tính phần trăm biến động."
+            )
         direction = "tăng" if percentage_change >= 0 else "giảm"
         return (
             f"Giá {ticker} đã {direction} khoảng {abs(percentage_change):.2f}% "
@@ -239,8 +258,13 @@ def _local_answer(question: str, rows: list[dict[str, Any]]) -> str:
 
     if {"date_1", "price_1", "date_2", "price_2", "price_change", "percent_change"} <= set(first):
         ticker = first.get("ticker") or _extract_symbol_from_question(question) or "mã này"
-        price_change = float(first["price_change"])
-        percent_change = float(first["percent_change"])
+        price_change = _safe_float(first.get("price_change"))
+        percent_change = _safe_float(first.get("percent_change"))
+        if price_change is None or percent_change is None:
+            return (
+                f"Đã tìm thấy giá {ticker} cho hai mốc thời gian, nhưng chưa đủ "
+                "dữ liệu để tính chênh lệch và phần trăm biến động."
+            )
         direction = "tăng" if price_change >= 0 else "giảm"
         return (
             f"Giá {ticker} đã {direction} từ {_format_scalar(first['price_1'])} vào {first['date_1']} "

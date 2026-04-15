@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from .config import Settings
+from .config import Settings, require_ssi_settings
 from .transformers import ddmmyyyy
 
 
@@ -23,7 +23,7 @@ class SSIClient:
     """REST client with cached access token and retry support."""
 
     def __init__(self, settings: Settings) -> None:
-        self.settings = settings
+        self.settings = require_ssi_settings(settings)
         self.session = requests.Session()
         self.token_state: TokenState | None = None
 

@@ -62,6 +62,21 @@ class Settings:
         )
 
 
+def _validate_numeric_settings(settings: Settings) -> None:
+    if settings.request_delay_seconds < 0:
+        raise ValueError("REQUEST_DELAY_SECONDS must be non-negative.")
+    if settings.max_retries < 0:
+        raise ValueError("MAX_RETRIES must be non-negative.")
+    if settings.gemini_timeout_seconds <= 0:
+        raise ValueError("GEMINI_TIMEOUT_SECONDS must be positive.")
+    if settings.gemini_max_retries < 0:
+        raise ValueError("GEMINI_MAX_RETRIES must be non-negative.")
+    if settings.gemini_retry_delay_seconds < 0:
+        raise ValueError("GEMINI_RETRY_DELAY_SECONDS must be non-negative.")
+    if settings.gemini_requests_per_minute <= 0:
+        raise ValueError("GEMINI_REQUESTS_PER_MINUTE must be positive.")
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Load settings from `.env` and process environment overrides."""
@@ -92,25 +107,31 @@ def get_settings() -> Settings:
         gemini_requests_per_minute=int(os.getenv("GEMINI_REQUESTS_PER_MINUTE", "15")),
     )
 
-    missing = []
-    if not settings.ssi_consumer_id:
+    _validate_numeric_settings(settings)
+
+    return settings
+
+
+def require_ssi_settings(settings: Settings | None = None) -> Settings:
+    """Xác nhận credential SSI có đủ trước khi chạy ETL hoặc gọi nguồn dữ liệu ngoài.
+
+    Args:
+        settings: Settings đã nạp sẵn nếu caller muốn tái sử dụng.
+
+    Returns:
+        Settings hợp lệ để gọi SSI.
+
+    Raises:
+        ValueError: Nếu thiếu SSI credential bắt buộc.
+    """
+
+    active_settings = settings or get_settings()
+    missing: list[str] = []
+    if not active_settings.ssi_consumer_id:
         missing.append("SSI_CONSUMER_ID")
-    if not settings.ssi_consumer_secret:
+    if not active_settings.ssi_consumer_secret:
         missing.append("SSI_CONSUMER_SECRET")
     if missing:
         raise ValueError(f"Missing required settings: {', '.join(missing)}")
 
-    if settings.request_delay_seconds < 0:
-        raise ValueError("REQUEST_DELAY_SECONDS must be non-negative.")
-    if settings.max_retries < 0:
-        raise ValueError("MAX_RETRIES must be non-negative.")
-    if settings.gemini_timeout_seconds <= 0:
-        raise ValueError("GEMINI_TIMEOUT_SECONDS must be positive.")
-    if settings.gemini_max_retries < 0:
-        raise ValueError("GEMINI_MAX_RETRIES must be non-negative.")
-    if settings.gemini_retry_delay_seconds < 0:
-        raise ValueError("GEMINI_RETRY_DELAY_SECONDS must be non-negative.")
-    if settings.gemini_requests_per_minute <= 0:
-        raise ValueError("GEMINI_REQUESTS_PER_MINUTE must be positive.")
-
-    return settings
+    return active_settings
