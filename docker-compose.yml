@@ -1,0 +1,150 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ssi-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  postgres-bootstrap:
+    image: postgres:16
+    container_name: ssi-postgres-bootstrap
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      bash -lc "
+      export PGPASSWORD=${POSTGRES_PASSWORD};
+      until psql -h postgres -U ${POSTGRES_USER} -d postgres -tc 'SELECT 1' >/dev/null 2>&1; do sleep 2; done;
+      psql -h postgres -U ${POSTGRES_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname='${AIRFLOW_POSTGRES_DB}'\" | grep -q 1 || psql -h postgres -U ${POSTGRES_USER} -d postgres -c \"CREATE DATABASE ${AIRFLOW_POSTGRES_DB}\";
+      "
+
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssi-airflow-init
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__WEBSERVER__RBAC: "true"
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      PYTHONPATH: /opt/airflow/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      postgres-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - ./:/opt/airflow
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create --username ${AIRFLOW_ADMIN_USERNAME} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname SSI --lastname Admin --role Admin --email ${AIRFLOW_ADMIN_EMAIL} || true
+      "
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssi-airflow-webserver
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__WEBSERVER__RBAC: "true"
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      PYTHONPATH: /opt/airflow/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./:/opt/airflow
+      - airflow_logs:/opt/airflow/logs
+    command: webserver
+    ports:
+      - "8080:8080"
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssi-airflow-scheduler
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__WEBSERVER__RBAC: "true"
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      PYTHONPATH: /opt/airflow/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+      airflow-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./:/opt/airflow
+      - airflow_logs:/opt/airflow/logs
+    command: scheduler
+
+  stock-qa-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssi-stock-qa-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /opt/airflow/src
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./:/opt/airflow
+    entrypoint: ["/bin/bash", "-lc", "uvicorn stock_etl.api:app --host 0.0.0.0 --port 8000"]
+    ports:
+      - "8000:8000"
+
+  adminer:
+    image: adminer:4
+    container_name: ssi-adminer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+
+volumes:
+  postgres_data:
+  airflow_logs:

@@ -1,0 +1,15 @@
+.env
+__pycache__/
+.pytest_cache/
+logs/*
+!logs/.gitkeep
+tmp/*
+!tmp/.gitkeep
+*.pyc
+postgres_data/
+airflow.cfg
+airflow.db
+airflow-webserver.pid
+exports/*.dump
+!exports/.gitkeep
+!exports/ssi_market_stock_only.dump
