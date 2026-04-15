@@ -29,10 +29,10 @@ historical comparison, intraday status, or market-data analysis.
 
 Return valid JSON only with this shape:
 {{
-  "primary_intent": "market|unknown",
+  "primary_intent": "market|news|financial_reports|unknown",
   "normalized_query": "...",
   "tools_to_use": ["market"],
-  "tool_queries": {{"market": "..."}},
+  "tool_queries": {{"market": "...", "news": "...", "financial_reports": "..."}},
   "entities": {{
     "tickers": ["ACB"],
     "company_names": ["Asia Commercial Bank"],
@@ -131,7 +131,13 @@ class IntentClassifier:
 
         if tools:
             return tools
-        return fallback_plan.tools_to_use
+        if fallback_plan.tools_to_use:
+            return fallback_plan.tools_to_use
+        primary_intent = fallback_plan.primary_intent
+        try:
+            return [ToolName(primary_intent)]
+        except ValueError:
+            return []
 
     def _plan_from_payload(
         self,
@@ -147,8 +153,8 @@ class IntentClassifier:
         for key, value in raw_tool_queries.items():
             if value:
                 tool_queries[str(key)] = str(value)
-        if tools_to_use and ToolName.MARKET.value not in tool_queries:
-            tool_queries[ToolName.MARKET.value] = normalized_query
+        for tool in tools_to_use:
+            tool_queries.setdefault(tool.value, normalized_query)
 
         entities = dict(fallback_plan.entities)
         entities.update(payload.get("entities") or {})
@@ -160,8 +166,14 @@ class IntentClassifier:
         time_constraints.update(payload.get("time_constraints") or {})
 
         primary_intent = str(payload.get("primary_intent") or fallback_plan.primary_intent)
-        if primary_intent not in {"market", "unknown"}:
+        valid_primary_intents = {tool.value for tool in ToolName} | {"unknown"}
+        if primary_intent not in valid_primary_intents:
             primary_intent = fallback_plan.primary_intent
+        if primary_intent == "unknown" and tools_to_use:
+            primary_intent = tools_to_use[0].value
+        if not tools_to_use and primary_intent in {tool.value for tool in ToolName}:
+            tools_to_use = [ToolName(primary_intent)]
+            tool_queries.setdefault(primary_intent, normalized_query)
 
         confidence = payload.get("confidence", fallback_plan.confidence)
         try:

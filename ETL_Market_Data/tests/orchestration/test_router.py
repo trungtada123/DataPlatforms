@@ -51,3 +51,24 @@ class ToolRouterTests(TestCase):
         requests = router.route(plan)
 
         self.assertEqual(requests, [])
+        self.assertEqual(router.unsupported_tools(plan), [ToolName.NEWS])
+
+    def test_does_not_misroute_financial_report_intent_to_market(self) -> None:
+        router = ToolRouter(enabled_tools=[ToolName.MARKET])
+        plan = IntentPlan(
+            original_query="Báo cáo tài chính quý 1 của HPG",
+            normalized_query="Báo cáo tài chính quý 1 của HPG",
+            tools_to_use=[ToolName.FINANCIAL_REPORTS],
+            tool_queries={"financial_reports": "Báo cáo tài chính quý 1 của HPG"},
+            entities={"tickers": ["HPG"]},
+            time_constraints={},
+            analysis_requirements={"financial_reports": True},
+            reasoning_brief="financial report query",
+            primary_intent=ToolName.FINANCIAL_REPORTS.value,
+            confidence=0.8,
+        )
+
+        requests = router.route(plan)
+
+        self.assertEqual(requests, [])
+        self.assertEqual(router.unsupported_tools(plan), [ToolName.FINANCIAL_REPORTS])

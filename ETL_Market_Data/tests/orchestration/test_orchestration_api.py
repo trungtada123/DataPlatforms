@@ -106,3 +106,93 @@ class OrchestrationApiTests(TestCase):
         compare_payload = compare_response.json()
         self.assertEqual(compare_payload["status"], "success")
         self.assertEqual(compare_payload["results"][0]["tool_name"], "market")
+
+    def test_news_query_returns_not_supported_yet(self) -> None:
+        with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.get_engine",
+            return_value=None,
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_intent_classifier",
+            return_value=IntentClassifier(
+                settings=SimpleNamespace(
+                    google_api_key="",
+                    gemini_model="gemini-test",
+                    tzinfo=timezone.utc,
+                )
+            ),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_market_adapter",
+            return_value=FakeMarketAdapter(),
+        ):
+            with TestClient(app) as client:
+                response = client.post("/query", json={"question": "Tin tức mới nhất về ACB là gì?"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "not_supported_yet")
+        self.assertTrue(payload["trace_id"])
+        self.assertEqual(payload["intent_plan"]["primary_intent"], ToolName.NEWS.value)
+        self.assertEqual(payload["tools_used"], [])
+        self.assertEqual(payload["results"][0]["tool_name"], ToolName.NEWS.value)
+        self.assertEqual(payload["results"][0]["status"], ToolExecutionStatus.NOT_SUPPORTED_YET.value)
+        self.assertTrue(payload["limitations"])
+        self.assertNotIn("debug_trace", payload)
+
+    def test_financial_report_query_returns_not_supported_yet(self) -> None:
+        with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.get_engine",
+            return_value=None,
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_intent_classifier",
+            return_value=IntentClassifier(
+                settings=SimpleNamespace(
+                    google_api_key="",
+                    gemini_model="gemini-test",
+                    tzinfo=timezone.utc,
+                )
+            ),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_market_adapter",
+            return_value=FakeMarketAdapter(),
+        ):
+            with TestClient(app) as client:
+                response = client.post("/query", json={"question": "Báo cáo tài chính quý 1 của HPG có gì đáng chú ý?"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "not_supported_yet")
+        self.assertEqual(payload["intent_plan"]["primary_intent"], ToolName.FINANCIAL_REPORTS.value)
+        self.assertEqual(payload["results"][0]["tool_name"], ToolName.FINANCIAL_REPORTS.value)
+
+    def test_response_shape_is_consistent_and_debug_trace_appears_only_when_enabled(self) -> None:
+        with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.get_engine",
+            return_value=None,
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_intent_classifier",
+            return_value=IntentClassifier(
+                settings=SimpleNamespace(
+                    google_api_key="",
+                    gemini_model="gemini-test",
+                    tzinfo=timezone.utc,
+                )
+            ),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_market_adapter",
+            return_value=FakeMarketAdapter(),
+        ):
+            with TestClient(app) as client:
+                normal_response = client.post("/query", json={"question": "HPG có đang trên MA50 không?"})
+                debug_response = client.post("/debug/run-tools", json={"question": "HPG có đang trên MA50 không?"})
+
+        normal_payload = normal_response.json()
+        debug_payload = debug_response.json()
+        for payload in (normal_payload, debug_payload):
+            self.assertTrue(payload["trace_id"])
+            self.assertIn("status", payload)
+            self.assertIn("intent_plan", payload)
+            self.assertIn("tools_used", payload)
+            self.assertIn("results", payload)
+            self.assertIn("limitations", payload)
+        self.assertNotIn("debug_trace", normal_payload)
+        self.assertEqual(debug_payload["debug_trace"]["trace_id"], debug_payload["trace_id"])

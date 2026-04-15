@@ -38,6 +38,29 @@ MARKET_KEYWORDS = (
     "khoi luong",
     "khối lượng",
 )
+NEWS_KEYWORDS = (
+    "tin tuc",
+    "tin tức",
+    "ban tin",
+    "bản tin",
+    "news",
+    "headline",
+    "bao chi",
+    "báo chí",
+)
+FINANCIAL_REPORT_KEYWORDS = (
+    "bao cao tai chinh",
+    "báo cáo tài chính",
+    "bctc",
+    "ket qua kinh doanh",
+    "kết quả kinh doanh",
+    "bao cao thuong nien",
+    "báo cáo thường niên",
+    "doanh thu",
+    "loi nhuan",
+    "lợi nhuận",
+    "eps",
+)
 CURRENT_KEYWORDS = (
     "hien tai",
     "hiện tại",
@@ -153,20 +176,43 @@ def build_rule_based_intent_plan(question: str) -> IntentPlan:
     is_technical = any(keyword in normalized for keyword in TECHNICAL_KEYWORDS)
     is_health_debug = any(keyword in normalized for keyword in HEALTH_DEBUG_KEYWORDS)
     is_historical = bool(explicit_dates) or "tu dau nam" in normalized or "từ đầu năm" in question or "lich su" in normalized
+    is_news = any(keyword in normalized for keyword in NEWS_KEYWORDS)
+    is_financial_reports = any(keyword in normalized for keyword in FINANCIAL_REPORT_KEYWORDS)
+    has_explicit_market_keywords = any(keyword in normalized for keyword in MARKET_KEYWORDS)
 
     market_signal = bool(
-        tickers
-        or company_names
-        or is_current
-        or is_comparison
-        or is_technical
+        has_explicit_market_keywords
         or is_health_debug
-        or any(keyword in normalized for keyword in MARKET_KEYWORDS)
+        or (
+            not is_news
+            and not is_financial_reports
+            and (is_current or is_comparison or is_technical or is_historical or bool(tickers) or bool(company_names))
+        )
     )
 
-    tools_to_use = [ToolName.MARKET] if market_signal else []
-    primary_intent = "market" if market_signal else "unknown"
-    confidence = 0.85 if market_signal else 0.25
+    tools_to_use: list[ToolName] = []
+    if market_signal:
+        tools_to_use.append(ToolName.MARKET)
+    if is_news:
+        tools_to_use.append(ToolName.NEWS)
+    if is_financial_reports:
+        tools_to_use.append(ToolName.FINANCIAL_REPORTS)
+
+    if is_news and not market_signal:
+        primary_intent = ToolName.NEWS.value
+    elif is_financial_reports and not market_signal:
+        primary_intent = ToolName.FINANCIAL_REPORTS.value
+    elif market_signal:
+        primary_intent = ToolName.MARKET.value
+    else:
+        primary_intent = "unknown"
+
+    if primary_intent == "unknown":
+        confidence = 0.25
+    elif primary_intent == ToolName.MARKET.value and len(tools_to_use) == 1:
+        confidence = 0.85
+    else:
+        confidence = 0.8
 
     time_constraints: dict[str, Any] = {
         "explicit_dates": explicit_dates,
@@ -186,6 +232,8 @@ def build_rule_based_intent_plan(question: str) -> IntentPlan:
         "technical_analysis": is_technical,
         "comparison": is_comparison,
         "health_debug": is_health_debug,
+        "news": is_news,
+        "financial_reports": is_financial_reports,
     }
 
     reasoning_parts: list[str] = []
@@ -201,18 +249,28 @@ def build_rule_based_intent_plan(question: str) -> IntentPlan:
         reasoning_parts.append("nhận diện ý định so sánh")
     if is_health_debug:
         reasoning_parts.append("nhận diện health/debug query")
+    if is_news:
+        reasoning_parts.append("nhận diện ý định news")
+    if is_financial_reports:
+        reasoning_parts.append("nhận diện ý định financial reports")
     if not reasoning_parts:
         reasoning_parts.append("không đủ tín hiệu để chắc chắn ngoài rule-based cơ bản")
+
+    tool_queries = {tool.value: question for tool in tools_to_use}
 
     return IntentPlan(
         original_query=question,
         normalized_query=" ".join(question.strip().split()),
         tools_to_use=tools_to_use,
-        tool_queries={ToolName.MARKET.value: question} if market_signal else {},
+        tool_queries=tool_queries,
         entities={
             "tickers": tickers,
             "company_names": company_names,
             "query_date_type": "intraday" if is_current else "historical" if is_historical else "unspecified",
+            "intraday": is_current,
+            "historical": is_historical or is_comparison,
+            "technical_analysis": is_technical,
+            "comparison": is_comparison,
         },
         time_constraints=time_constraints,
         analysis_requirements=analysis_requirements,

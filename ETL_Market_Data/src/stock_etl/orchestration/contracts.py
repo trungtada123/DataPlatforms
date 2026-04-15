@@ -24,6 +24,7 @@ class ToolExecutionStatus(str, Enum):
     NO_DATA = "no_data"
     ERROR = "error"
     SKIPPED = "skipped"
+    NOT_SUPPORTED_YET = "not_supported_yet"
 
 
 class TraceEvent(BaseModel):
@@ -83,13 +84,16 @@ class ToolExecutionResult(BaseModel):
     evidence: list[dict[str, Any]] = Field(default_factory=list)
     raw_response: dict[str, Any] = Field(default_factory=dict)
     error_message: str | None = None
+    limitations: list[str] = Field(default_factory=list)
 
 
 class DebugTrace(BaseModel):
     """Trace phục vụ debug cho toàn bộ flow orchestration."""
 
     trace_id: str
+    requested_tools: list[ToolName] = Field(default_factory=list)
     chosen_tools: list[ToolName] = Field(default_factory=list)
+    unsupported_tools: list[ToolName] = Field(default_factory=list)
     fallback_reason: str | None = None
     generated_sql: str | None = None
     latency_ms: float | None = None
@@ -108,4 +112,5 @@ class NormalizedQueryResponse(BaseModel):
     intent_plan: IntentPlan
     tools_used: list[ToolName] = Field(default_factory=list)
     results: list[ToolExecutionResult] = Field(default_factory=list)
-    debug_trace: DebugTrace
+    limitations: list[str] = Field(default_factory=list)
+    debug_trace: DebugTrace | None = None

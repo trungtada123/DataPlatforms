@@ -60,6 +60,18 @@ class TraceCollector:
         if tool_name not in self._trace.chosen_tools:
             self._trace.chosen_tools.append(tool_name)
 
+    def add_requested_tool(self, tool_name: ToolName) -> None:
+        """Ghi nhận tool mà classifier/router đã request."""
+
+        if tool_name not in self._trace.requested_tools:
+            self._trace.requested_tools.append(tool_name)
+
+    def add_unsupported_tool(self, tool_name: ToolName) -> None:
+        """Ghi nhận tool đã được nhận diện nhưng chưa support ở runtime."""
+
+        if tool_name not in self._trace.unsupported_tools:
+            self._trace.unsupported_tools.append(tool_name)
+
     def set_fallback_reason(self, reason: str) -> None:
         """Ghi nhận lý do fallback."""
 

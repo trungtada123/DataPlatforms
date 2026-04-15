@@ -62,3 +62,35 @@ class IntentClassifierTests(TestCase):
         self.assertEqual(plan.classifier_mode, "fallback_rule_based")
         self.assertEqual(plan.tools_to_use, [ToolName.MARKET])
         self.assertTrue(plan.analysis_requirements["technical_analysis"])
+
+    def test_detects_news_query_as_unsupported_tool(self) -> None:
+        classifier = IntentClassifier(
+            settings=SimpleNamespace(
+                google_api_key="",
+                gemini_model="gemini-test",
+                tzinfo=timezone.utc,
+            )
+        )
+
+        plan = classifier.classify("Tin tức mới nhất về ACB hôm nay là gì?")
+
+        self.assertEqual(plan.primary_intent, ToolName.NEWS.value)
+        self.assertEqual(plan.tools_to_use, [ToolName.NEWS])
+        self.assertEqual(plan.entities["tickers"], ["ACB"])
+        self.assertTrue(plan.analysis_requirements["news"])
+
+    def test_detects_financial_report_query_as_unsupported_tool(self) -> None:
+        classifier = IntentClassifier(
+            settings=SimpleNamespace(
+                google_api_key="",
+                gemini_model="gemini-test",
+                tzinfo=timezone.utc,
+            )
+        )
+
+        plan = classifier.classify("Báo cáo tài chính quý 1 của HPG có gì đáng chú ý?")
+
+        self.assertEqual(plan.primary_intent, ToolName.FINANCIAL_REPORTS.value)
+        self.assertEqual(plan.tools_to_use, [ToolName.FINANCIAL_REPORTS])
+        self.assertEqual(plan.entities["tickers"], ["HPG"])
+        self.assertTrue(plan.analysis_requirements["financial_reports"])
