@@ -39,6 +39,11 @@ MARKET_KEYWORDS = (
     "khối lượng",
 )
 NEWS_KEYWORDS = (
+    "tin",
+    "tin moi nhat",
+    "tin mới nhất",
+    "tin gan day",
+    "tin gần đây",
     "tin tuc",
     "tin tức",
     "ban tin",
@@ -176,7 +181,7 @@ def build_rule_based_intent_plan(question: str) -> IntentPlan:
     is_technical = any(keyword in normalized for keyword in TECHNICAL_KEYWORDS)
     is_health_debug = any(keyword in normalized for keyword in HEALTH_DEBUG_KEYWORDS)
     is_historical = bool(explicit_dates) or "tu dau nam" in normalized or "từ đầu năm" in question or "lich su" in normalized
-    is_news = any(keyword in normalized for keyword in NEWS_KEYWORDS)
+    is_news = any(keyword in normalized for keyword in NEWS_KEYWORDS) or re.search(r"\btin\b", normalized) is not None
     is_financial_reports = any(keyword in normalized for keyword in FINANCIAL_REPORT_KEYWORDS)
     has_explicit_market_keywords = any(keyword in normalized for keyword in MARKET_KEYWORDS)
 

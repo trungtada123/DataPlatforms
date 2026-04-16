@@ -7,9 +7,8 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
-import google.generativeai as genai
-
 from ..config import Settings, get_settings
+from ..gemini_pool import GeminiKeyPool
 from .contracts import IntentPlan, NormalizedQueryRequest, ToolName
 from .fallback_rules import build_rule_based_intent_plan
 
@@ -85,11 +84,12 @@ class IntentClassifier:
         normalized_request = request if isinstance(request, NormalizedQueryRequest) else NormalizedQueryRequest(question=request)
         fallback_plan = build_rule_based_intent_plan(normalized_request.question)
 
-        if not self.settings.google_api_key:
+        if not self.settings.google_api_keys:
             return fallback_plan
 
         try:
-            return self._classify_with_gemini(normalized_request.question, fallback_plan)
+            plan = self._classify_with_gemini(normalized_request.question, fallback_plan)
+            return self._preserve_multi_tool_guard(plan, fallback_plan)
         except Exception:
             fallback_plan.classifier_mode = "fallback_rule_based"
             return fallback_plan
@@ -97,18 +97,16 @@ class IntentClassifier:
     def _classify_with_gemini(self, question: str, fallback_plan: IntentPlan) -> IntentPlan:
         """Dùng Gemini để enrich thêm plan khi có model khả dụng."""
 
-        genai.configure(api_key=self.settings.google_api_key)
-        model = genai.GenerativeModel(
-            model_name=self.settings.gemini_model,
-            generation_config={"temperature": 0.0},
-        )
         now_tz = getattr(self.settings, "tzinfo", timezone.utc)
         prompt = CLASSIFIER_PROMPT_TEMPLATE.format(
             today=datetime.now(now_tz).date().isoformat(),
             question=question,
         )
-        response = model.generate_content(prompt)
-        payload = self._extract_json_payload(response.text or "")
+        response_text = GeminiKeyPool(
+            self.settings,
+            generation_config={"temperature": 0.0},
+        ).generate_text(prompt)
+        payload = self._extract_json_payload(response_text or "")
         return self._plan_from_payload(question, payload, fallback_plan)
 
     @staticmethod
@@ -193,4 +191,37 @@ class IntentClassifier:
             primary_intent=primary_intent,
             classifier_mode="gemini",
             confidence=normalized_confidence,
+        )
+
+    @staticmethod
+    def _preserve_multi_tool_guard(plan: IntentPlan, fallback_plan: IntentPlan) -> IntentPlan:
+        """Giữ lại tín hiệu multi-tool từ fallback để tránh route sai sang single-tool.
+
+        Args:
+            plan: Intent plan do Gemini trả về.
+            fallback_plan: Intent plan rule-based đã phát hiện multi-signal nếu có.
+
+        Returns:
+            Intent plan đã được bảo toàn multi-tool signal khi cần.
+        """
+
+        if len(fallback_plan.tools_to_use) <= 1:
+            return plan
+
+        merged_tools = list(fallback_plan.tools_to_use)
+        for tool in plan.tools_to_use:
+            if tool not in merged_tools:
+                merged_tools.append(tool)
+
+        merged_tool_queries = dict(fallback_plan.tool_queries)
+        merged_tool_queries.update(plan.tool_queries)
+        for tool in merged_tools:
+            merged_tool_queries.setdefault(tool.value, plan.normalized_query)
+
+        return plan.model_copy(
+            update={
+                "tools_to_use": merged_tools,
+                "tool_queries": merged_tool_queries,
+                "reasoning_brief": f"{plan.reasoning_brief}; giữ multi-tool signal từ fallback để tránh misroute",
+            }
         )

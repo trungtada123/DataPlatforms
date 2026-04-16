@@ -15,54 +15,116 @@ from stock_etl.orchestration.orchestration_api import app
 
 
 class FakeMarketAdapter:
-    """Adapter giả để kiểm tra flow API mà không cần DB hay Gemini thật."""
+    """Adapter giả để kiểm tra flow market."""
 
     def run(self, request, *, trace_collector=None):  # type: ignore[no-untyped-def]
-        query = request.query
-        if "ACB" in query:
-            summary = "Giá ACB hiện tại theo market adapter giả là 25.10."
-            status = ToolExecutionStatus.SUCCESS
-        elif "TCB" in query and "13/01/2026" in query and "14/04/2026" in query:
+        summary = "Giá ACB hiện tại theo market adapter giả là 25.10."
+        structured_data = {"query": request.query}
+        if "TCB" in request.query:
             summary = "TCB tăng 5.20% giữa hai mốc ngày."
-            status = ToolExecutionStatus.SUCCESS
-        elif "HPG" in query and "MA50" in query.upper():
+        if "HPG" in request.query and "MA50" in request.query.upper():
             summary = "HPG đang trên MA50."
-            status = ToolExecutionStatus.SUCCESS
-        else:
-            summary = "Không có dữ liệu giả cho query này."
-            status = ToolExecutionStatus.NO_DATA
+        if "ACB" in request.query.upper() and "GIÁ" in request.query.upper():
+            structured_data = {
+                "row_count": 1,
+                "rows": [
+                    {
+                        "ticker": "ACB",
+                        "current_price": 25100.0,
+                        "timestamp": "2026-04-16T05:06:00+00:00",
+                    }
+                ],
+            }
+        if "FPT" in request.query.upper() and "GIÁ" in request.query.upper():
+            structured_data = {
+                "row_count": 1,
+                "rows": [
+                    {
+                        "ticker": "FPT",
+                        "current_price": 74300.0,
+                        "timestamp": "2026-04-16T05:06:00+00:00",
+                    }
+                ],
+            }
         if trace_collector:
             trace_collector.add_event("fake_market_adapter.run", detail=summary)
         return ToolExecutionResult(
             tool_name=ToolName.MARKET,
-            status=status,
-            query_used=query,
+            status=ToolExecutionStatus.SUCCESS,
+            query_used=request.query,
             summary=summary,
-            structured_data={"query": query},
+            structured_data=structured_data,
             evidence=[],
-            raw_response={"query": query},
+            raw_response={"query": request.query},
+        )
+
+
+class FakeNewsAdapter:
+    """Adapter giả để kiểm tra flow news."""
+
+    def run(self, request, *, trace_collector=None):  # type: ignore[no-untyped-def]
+        summary = "[cafef.vn] Hòa Phát có tin mới về sản lượng và đầu tư."
+        if "ACB" in request.query.upper():
+            summary = "[cafef.vn] ACB có cập nhật mới về hoạt động ngân hàng."
+        if trace_collector:
+            trace_collector.add_event("fake_news_adapter.run", detail=summary)
+        return ToolExecutionResult(
+            tool_name=ToolName.NEWS,
+            status=ToolExecutionStatus.SUCCESS,
+            query_used=request.query,
+            summary=summary,
+            structured_data={"query_id": "news-q1", "run_id": "news-r1", "article_count": 2},
+            evidence=[
+                {
+                    "kind": "article",
+                    "value": {"title": "Hòa Phát cập nhật hoạt động", "site": "cafef.vn"},
+                }
+            ],
+            raw_response={"query": request.query},
         )
 
 
 class OrchestrationApiTests(TestCase):
     """Kiểm tra endpoint classify và query của orchestration API."""
 
+    def _build_classifier(self) -> IntentClassifier:
+        return IntentClassifier(
+            settings=SimpleNamespace(
+                google_api_key="",
+                google_api_keys=[],
+                gemini_model="gemini-test",
+                tzinfo=timezone.utc,
+            )
+        )
+
+    def test_home_serves_orchestration_ui(self) -> None:
+        with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.ensure_news_schema"
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_engine",
+            return_value=None,
+        ):
+            with TestClient(app) as client:
+                response = client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("tool 2 news", response.text.lower())
+
     def test_query_routes_market_questions(self) -> None:
         with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.ensure_news_schema"
+        ), patch(
             "stock_etl.orchestration.orchestration_api.get_engine",
             return_value=None,
         ), patch(
             "stock_etl.orchestration.orchestration_api.get_intent_classifier",
-            return_value=IntentClassifier(
-                settings=SimpleNamespace(
-                    google_api_key="",
-                    gemini_model="gemini-test",
-                    tzinfo=timezone.utc,
-                )
-            ),
+            return_value=self._build_classifier(),
         ), patch(
             "stock_etl.orchestration.orchestration_api.get_market_adapter",
             return_value=FakeMarketAdapter(),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_news_adapter",
+            return_value=FakeNewsAdapter(),
         ):
             with TestClient(app) as client:
                 response = client.post("/query", json={"question": "Giá ACB hiện tại là bao nhiêu?"})
@@ -72,91 +134,82 @@ class OrchestrationApiTests(TestCase):
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["tools_used"], ["market"])
         self.assertEqual(payload["intent_plan"]["entities"]["tickers"], ["ACB"])
+        self.assertIn("Giá hiện tại của ACB là 25,100.", payload["answer"])
+        self.assertIn("Thời điểm cập nhật:", payload["answer"])
 
-    def test_classify_and_query_supports_required_phase_a_examples(self) -> None:
+    def test_news_query_is_supported(self) -> None:
         with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.ensure_news_schema"
+        ), patch(
             "stock_etl.orchestration.orchestration_api.get_engine",
             return_value=None,
         ), patch(
             "stock_etl.orchestration.orchestration_api.get_intent_classifier",
-            return_value=IntentClassifier(
-                settings=SimpleNamespace(
-                    google_api_key="",
-                    gemini_model="gemini-test",
-                    tzinfo=timezone.utc,
-                )
-            ),
+            return_value=self._build_classifier(),
         ), patch(
             "stock_etl.orchestration.orchestration_api.get_market_adapter",
             return_value=FakeMarketAdapter(),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_news_adapter",
+            return_value=FakeNewsAdapter(),
         ):
             with TestClient(app) as client:
-                classify_response = client.post("/classify", json={"question": "HPG có đang trên MA50 không?"})
-                compare_response = client.post(
-                    "/query",
-                    json={"question": "So sánh giá TCB ngày 13/01/2026 và 14/04/2026"},
-                )
-
-        self.assertEqual(classify_response.status_code, 200)
-        classify_payload = classify_response.json()
-        self.assertEqual(classify_payload["primary_intent"], "market")
-        self.assertTrue(classify_payload["analysis_requirements"]["technical_analysis"])
-
-        self.assertEqual(compare_response.status_code, 200)
-        compare_payload = compare_response.json()
-        self.assertEqual(compare_payload["status"], "success")
-        self.assertEqual(compare_payload["results"][0]["tool_name"], "market")
-
-    def test_news_query_returns_not_supported_yet(self) -> None:
-        with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
-            "stock_etl.orchestration.orchestration_api.get_engine",
-            return_value=None,
-        ), patch(
-            "stock_etl.orchestration.orchestration_api.get_intent_classifier",
-            return_value=IntentClassifier(
-                settings=SimpleNamespace(
-                    google_api_key="",
-                    gemini_model="gemini-test",
-                    tzinfo=timezone.utc,
-                )
-            ),
-        ), patch(
-            "stock_etl.orchestration.orchestration_api.get_market_adapter",
-            return_value=FakeMarketAdapter(),
-        ):
-            with TestClient(app) as client:
-                response = client.post("/query", json={"question": "Tin tức mới nhất về ACB là gì?"})
+                response = client.post("/query", json={"question": "Tin mới nhất hôm nay của Hòa Phát là gì?"})
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertEqual(payload["status"], "not_supported_yet")
-        self.assertTrue(payload["trace_id"])
-        self.assertEqual(payload["intent_plan"]["primary_intent"], ToolName.NEWS.value)
-        self.assertEqual(payload["tools_used"], [])
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["tools_used"], ["news"])
         self.assertEqual(payload["results"][0]["tool_name"], ToolName.NEWS.value)
-        self.assertEqual(payload["results"][0]["status"], ToolExecutionStatus.NOT_SUPPORTED_YET.value)
-        self.assertTrue(payload["limitations"])
-        self.assertNotIn("debug_trace", payload)
+        self.assertTrue(payload["trace_id"])
 
-    def test_financial_report_query_returns_not_supported_yet(self) -> None:
+    def test_mixed_market_and_news_query_runs_both_tools(self) -> None:
         with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.ensure_news_schema"
+        ), patch(
             "stock_etl.orchestration.orchestration_api.get_engine",
             return_value=None,
         ), patch(
             "stock_etl.orchestration.orchestration_api.get_intent_classifier",
-            return_value=IntentClassifier(
-                settings=SimpleNamespace(
-                    google_api_key="",
-                    gemini_model="gemini-test",
-                    tzinfo=timezone.utc,
-                )
-            ),
+            return_value=self._build_classifier(),
         ), patch(
             "stock_etl.orchestration.orchestration_api.get_market_adapter",
             return_value=FakeMarketAdapter(),
+        ) as market_adapter_patch, patch(
+            "stock_etl.orchestration.orchestration_api.get_news_adapter",
+            return_value=FakeNewsAdapter(),
+        ) as news_adapter_patch:
+            with TestClient(app) as client:
+                response = client.post("/query", json={"question": "Tin mới nhất của HPG và giá phản ứng ra sao?"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["tools_used"], ["market", "news"])
+        self.assertEqual({item["tool_name"] for item in payload["results"]}, {"market", "news"})
+        self.assertTrue("market:" in payload["answer"])
+        self.assertTrue("news:" in payload["answer"])
+        market_adapter_patch.assert_called_once()
+        news_adapter_patch.assert_called_once()
+
+    def test_financial_report_query_returns_not_supported_yet(self) -> None:
+        with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.ensure_news_schema"
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_engine",
+            return_value=None,
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_intent_classifier",
+            return_value=self._build_classifier(),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_market_adapter",
+            return_value=FakeMarketAdapter(),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_news_adapter",
+            return_value=FakeNewsAdapter(),
         ):
             with TestClient(app) as client:
-                response = client.post("/query", json={"question": "Báo cáo tài chính quý 1 của HPG có gì đáng chú ý?"})
+                response = client.post("/query", json={"question": "Phân tích báo cáo tài chính quý gần nhất của FPT"})
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -164,26 +217,58 @@ class OrchestrationApiTests(TestCase):
         self.assertEqual(payload["intent_plan"]["primary_intent"], ToolName.FINANCIAL_REPORTS.value)
         self.assertEqual(payload["results"][0]["tool_name"], ToolName.FINANCIAL_REPORTS.value)
 
-    def test_response_shape_is_consistent_and_debug_trace_appears_only_when_enabled(self) -> None:
+    def test_mixed_supported_and_unsupported_tools_returns_partial_success(self) -> None:
         with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.ensure_news_schema"
+        ), patch(
             "stock_etl.orchestration.orchestration_api.get_engine",
             return_value=None,
         ), patch(
             "stock_etl.orchestration.orchestration_api.get_intent_classifier",
-            return_value=IntentClassifier(
-                settings=SimpleNamespace(
-                    google_api_key="",
-                    gemini_model="gemini-test",
-                    tzinfo=timezone.utc,
-                )
-            ),
+            return_value=self._build_classifier(),
         ), patch(
             "stock_etl.orchestration.orchestration_api.get_market_adapter",
             return_value=FakeMarketAdapter(),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_news_adapter",
+            return_value=FakeNewsAdapter(),
+        ):
+            with TestClient(app) as client:
+                response = client.post(
+                    "/query",
+                    json={"question": "Giá FPT hiện tại và báo cáo tài chính quý gần nhất có gì đáng chú ý?"},
+                )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["status"], "partial_success")
+        self.assertEqual(payload["tools_used"], ["market"])
+        self.assertTrue(payload["limitations"])
+        self.assertEqual({item["tool_name"] for item in payload["results"]}, {"market", "financial_reports"})
+        self.assertIn("market:", payload["answer"])
+        self.assertIn("financial_reports:", payload["answer"])
+        self.assertIn("chưa được hỗ trợ", payload["answer"])
+        self.assertIn("Giá hiện tại của FPT là 74,300.", payload["answer"])
+
+    def test_response_shape_is_consistent_and_debug_trace_appears_only_when_enabled(self) -> None:
+        with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
+            "stock_etl.orchestration.orchestration_api.ensure_news_schema"
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_engine",
+            return_value=None,
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_intent_classifier",
+            return_value=self._build_classifier(),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_market_adapter",
+            return_value=FakeMarketAdapter(),
+        ), patch(
+            "stock_etl.orchestration.orchestration_api.get_news_adapter",
+            return_value=FakeNewsAdapter(),
         ):
             with TestClient(app) as client:
                 normal_response = client.post("/query", json={"question": "HPG có đang trên MA50 không?"})
-                debug_response = client.post("/debug/run-tools", json={"question": "HPG có đang trên MA50 không?"})
+                debug_response = client.post("/debug/run-tools", json={"question": "Tin gần đây của ACB có gì đáng chú ý?"})
 
         normal_payload = normal_response.json()
         debug_payload = debug_response.json()

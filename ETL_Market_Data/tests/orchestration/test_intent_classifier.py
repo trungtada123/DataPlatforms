@@ -18,6 +18,7 @@ class IntentClassifierTests(TestCase):
         classifier = IntentClassifier(
             settings=SimpleNamespace(
                 google_api_key="",
+                google_api_keys=[],
                 gemini_model="gemini-test",
                 tzinfo=timezone.utc,
             )
@@ -34,6 +35,7 @@ class IntentClassifierTests(TestCase):
         classifier = IntentClassifier(
             settings=SimpleNamespace(
                 google_api_key="",
+                google_api_keys=[],
                 gemini_model="gemini-test",
                 tzinfo=timezone.utc,
             )
@@ -50,6 +52,7 @@ class IntentClassifierTests(TestCase):
         classifier = IntentClassifier(
             settings=SimpleNamespace(
                 google_api_key="present-key",
+                google_api_keys=["present-key", "backup-key"],
                 gemini_model="gemini-test",
                 tzinfo=timezone.utc,
             )
@@ -67,6 +70,7 @@ class IntentClassifierTests(TestCase):
         classifier = IntentClassifier(
             settings=SimpleNamespace(
                 google_api_key="",
+                google_api_keys=[],
                 gemini_model="gemini-test",
                 tzinfo=timezone.utc,
             )
@@ -83,6 +87,7 @@ class IntentClassifierTests(TestCase):
         classifier = IntentClassifier(
             settings=SimpleNamespace(
                 google_api_key="",
+                google_api_keys=[],
                 gemini_model="gemini-test",
                 tzinfo=timezone.utc,
             )
@@ -94,3 +99,18 @@ class IntentClassifierTests(TestCase):
         self.assertEqual(plan.tools_to_use, [ToolName.FINANCIAL_REPORTS])
         self.assertEqual(plan.entities["tickers"], ["HPG"])
         self.assertTrue(plan.analysis_requirements["financial_reports"])
+
+    def test_detects_mixed_market_and_news_query(self) -> None:
+        classifier = IntentClassifier(
+            settings=SimpleNamespace(
+                google_api_key="",
+                google_api_keys=[],
+                gemini_model="gemini-test",
+                tzinfo=timezone.utc,
+            )
+        )
+
+        plan = classifier.classify("Tin mới nhất của HPG và giá phản ứng ra sao?")
+
+        self.assertIn(ToolName.MARKET, plan.tools_to_use)
+        self.assertIn(ToolName.NEWS, plan.tools_to_use)

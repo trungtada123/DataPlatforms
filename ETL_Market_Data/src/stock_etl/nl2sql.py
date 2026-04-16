@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import json
 import re
-import time
 import unicodedata
+from hashlib import sha256
 from datetime import date, datetime
 from decimal import Decimal
 from threading import Lock
 from typing import Any
 
-import google.generativeai as genai
-
 from .config import PROJECT_ROOT, get_settings
 from .database import execute_readonly_sql
+from .gemini_pool import GeminiKeyPool
 
 
 SQL_PROMPT_TEMPLATE = """
@@ -292,7 +291,7 @@ def _local_answer(question: str, rows: list[dict[str, Any]]) -> str:
 
 def _load_usage() -> dict[str, Any]:
     if not USAGE_FILE.exists():
-        return {"recent_calls": []}
+        return {"recent_calls_by_key": {}}
     return json.loads(USAGE_FILE.read_text(encoding="utf-8"))
 
 
@@ -306,54 +305,48 @@ class GeminiSQLAssistant:
 
     def __init__(self) -> None:
         self.settings = get_settings()
-        if not self.settings.google_api_key:
+        if not self.settings.google_api_keys:
             raise ValueError("GOOGLE_API_KEY is required for NL2SQL.")
-        genai.configure(api_key=self.settings.google_api_key)
-        self.model = genai.GenerativeModel(
-            model_name=self.settings.gemini_model,
+        self.generator = GeminiKeyPool(
+            self.settings,
             generation_config={"temperature": 0.1},
+            before_request=self._enforce_quota,
+            after_success=self._record_usage,
         )
 
     def _generate_with_retry(self, prompt: str) -> str:
-        last_error: Exception | None = None
-        for attempt in range(self.settings.gemini_max_retries + 1):
-            try:
-                self._enforce_quota()
-                response = self.model.generate_content(prompt)
-                self._record_usage()
-                return response.text or ""
-            except Exception as exc:  # noqa: BLE001
-                last_error = exc
-                error_text = str(exc).lower()
-                if "429" in error_text or "quota exceeded" in error_text or "rate limit" in error_text:
-                    break
-                if attempt >= self.settings.gemini_max_retries:
-                    break
-                time.sleep(self.settings.gemini_retry_delay_seconds * (attempt + 1))
-        raise RuntimeError(str(last_error)) from last_error
+        return self.generator.generate_text(prompt)
 
-    def _enforce_quota(self) -> None:
+    def _enforce_quota(self, api_key: str) -> None:
         now = datetime.now(self.settings.tzinfo)
         with USAGE_LOCK:
             usage = _load_usage()
+            usage_by_key = usage.get("recent_calls_by_key", {})
+            bucket = self._usage_bucket_for_key(api_key)
             recent_calls = [
-                ts for ts in usage.get("recent_calls", [])
+                ts for ts in usage_by_key.get(bucket, [])
                 if now.timestamp() - float(ts) < 60
             ]
             if len(recent_calls) >= self.settings.gemini_requests_per_minute:
                 raise RuntimeError("Gemini quota guard: đã chạm giới hạn request mỗi phút.")
 
-    def _record_usage(self) -> None:
+    def _record_usage(self, api_key: str) -> None:
         now = datetime.now(self.settings.tzinfo)
         with USAGE_LOCK:
             usage = _load_usage()
+            usage_by_key = usage.setdefault("recent_calls_by_key", {})
+            bucket = self._usage_bucket_for_key(api_key)
             recent_calls = [
-                ts for ts in usage.get("recent_calls", [])
+                ts for ts in usage_by_key.get(bucket, [])
                 if now.timestamp() - float(ts) < 60
             ]
             recent_calls.append(now.timestamp())
-            usage["recent_calls"] = recent_calls
+            usage_by_key[bucket] = recent_calls
             _save_usage(usage)
+
+    @staticmethod
+    def _usage_bucket_for_key(api_key: str) -> str:
+        return sha256(api_key.encode("utf-8")).hexdigest()[:12]
 
     def ask(self, question: str) -> dict[str, Any]:
         today = datetime.now(self.settings.tzinfo).date().isoformat()
