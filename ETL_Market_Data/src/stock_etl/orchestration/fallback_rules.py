@@ -24,8 +24,12 @@ COMPANY_ALIASES: dict[str, tuple[str, str]] = {
 MARKET_KEYWORDS = (
     "gia",
     "giá",
+    "price",
+    "current price",
     "co phieu",
     "cổ phiếu",
+    "stock price",
+    "share price",
     "thi truong",
     "thị trường",
     "ma50",
@@ -56,23 +60,54 @@ NEWS_KEYWORDS = (
 FINANCIAL_REPORT_KEYWORDS = (
     "bao cao tai chinh",
     "báo cáo tài chính",
+    "financial report",
+    "financial statements",
     "bctc",
     "ket qua kinh doanh",
     "kết quả kinh doanh",
     "bao cao thuong nien",
     "báo cáo thường niên",
+    "annual report",
+    "review opinion",
+    "audit opinion",
+    "review conclusion",
+    "soat xet",
+    "soát xét",
+    "kiem toan",
+    "kiểm toán",
+    "y kien soat xet",
+    "ý kiến soát xét",
+    "y kien kiem toan",
+    "ý kiến kiểm toán",
+    "unqualified review opinion",
     "doanh thu",
     "loi nhuan",
     "lợi nhuận",
     "eps",
 )
+FINANCIAL_REPORT_METRIC_KEYWORDS = (
+    "tong tai san",
+    "tổng tài sản",
+    "cho vay khach hang",
+    "cho vay khách hàng",
+    "tien gui cua khach hang",
+    "tiền gửi của khách hàng",
+    "loi nhuan sau thue",
+    "lợi nhuận sau thuế",
+    "total assets",
+    "customer loans",
+    "customer deposits",
+    "profit after tax",
+)
 CURRENT_KEYWORDS = (
     "hien tai",
     "hiện tại",
+    "current",
     "hom nay",
     "hôm nay",
     "moi nhat",
     "mới nhất",
+    "latest",
     "intraday",
     "trong phien",
     "trong phiên",
@@ -132,6 +167,87 @@ def extract_dates(question: str) -> list[str]:
         if value not in deduped:
             deduped.append(value)
     return deduped
+
+
+def _extract_report_year(question: str) -> int | None:
+    match = re.search(r"\b(20\d{2})\b", question)
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _extract_report_quarter(question: str) -> int | None:
+    quarter_match = re.search(r"\bq([1-4])\b", question, flags=re.IGNORECASE)
+    if quarter_match:
+        return int(quarter_match.group(1))
+
+    vietnamese_match = re.search(r"quy\s*([1-4])", normalize_free_text(question))
+    if vietnamese_match:
+        return int(vietnamese_match.group(1))
+
+    english_match = re.search(r"quarter\s*([1-4])", normalize_free_text(question))
+    if english_match:
+        return int(english_match.group(1))
+    return None
+
+
+def _build_fallback_tool_queries(
+    question: str,
+    tools_to_use: list[ToolName],
+    tickers: list[str],
+    company_names: list[str],
+    *,
+    is_current: bool,
+    is_technical: bool,
+    is_financial_reports: bool,
+) -> dict[str, str]:
+    primary_ticker = tickers[0] if tickers else ""
+    primary_company = company_names[0] if company_names else ""
+    report_year = _extract_report_year(question)
+    report_quarter = _extract_report_quarter(question)
+    normalized_question = normalize_free_text(question)
+    asks_report_metric = any(keyword in normalized_question for keyword in FINANCIAL_REPORT_METRIC_KEYWORDS)
+
+    tool_queries: dict[str, str] = {}
+    for tool in tools_to_use:
+        if tool == ToolName.MARKET:
+            if primary_ticker and is_technical:
+                tool_queries[tool.value] = f"technical indicators for {primary_ticker}"
+            elif primary_ticker and is_current:
+                tool_queries[tool.value] = f"giá hiện tại của {primary_ticker}"
+            elif primary_ticker:
+                tool_queries[tool.value] = f"dữ liệu thị trường của {primary_ticker}"
+            else:
+                tool_queries[tool.value] = question
+            continue
+
+        if tool == ToolName.NEWS:
+            if primary_company and "bank" in primary_company.lower():
+                tool_queries[tool.value] = f"recent news about bank {primary_ticker or primary_company}"
+            elif primary_ticker:
+                tool_queries[tool.value] = f"recent news about {primary_ticker}"
+            elif primary_company:
+                tool_queries[tool.value] = f"recent news about {primary_company}"
+            else:
+                tool_queries[tool.value] = question
+            continue
+
+        if tool == ToolName.FINANCIAL_REPORTS:
+            if primary_ticker and asks_report_metric:
+                tool_queries[tool.value] = question
+            elif primary_ticker and report_year and report_quarter and is_financial_reports:
+                tool_queries[tool.value] = (
+                    f"{primary_ticker} reviewed financial statements Q{report_quarter} {report_year} opinion"
+                )
+            elif primary_ticker:
+                tool_queries[tool.value] = f"financial report for {primary_ticker}"
+            else:
+                tool_queries[tool.value] = question
+            continue
+
+        tool_queries[tool.value] = question
+
+    return tool_queries
 
 
 def detect_simple_market_fallback(question: str) -> dict[str, Any] | None:
@@ -261,7 +377,15 @@ def build_rule_based_intent_plan(question: str) -> IntentPlan:
     if not reasoning_parts:
         reasoning_parts.append("không đủ tín hiệu để chắc chắn ngoài rule-based cơ bản")
 
-    tool_queries = {tool.value: question for tool in tools_to_use}
+    tool_queries = _build_fallback_tool_queries(
+        question,
+        tools_to_use,
+        tickers,
+        company_names,
+        is_current=is_current,
+        is_technical=is_technical,
+        is_financial_reports=is_financial_reports,
+    )
 
     return IntentPlan(
         original_query=question,

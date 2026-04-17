@@ -13,3 +13,12 @@ airflow-webserver.pid
 exports/*.dump
 !exports/.gitkeep
 !exports/ssi_market_stock_only.dump
+
+# Artifact crawl/query sinh ra ở root theo query_id hash 32 ký tự hex
+/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
+
+# Notebook/checkpoint và file local sinh ra khi test thủ công
+.ipynb_checkpoints/
+
+# Parsed financial reports chỉ dùng local/dev, không commit vào repo chính
+data/financial_reports/parsed_output/

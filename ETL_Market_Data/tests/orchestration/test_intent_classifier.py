@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
+from stock_etl.orchestration.fallback_rules import build_rule_based_intent_plan
 from stock_etl.orchestration.contracts import ToolName
 from stock_etl.orchestration.intent_classifier import IntentClassifier
 
@@ -114,3 +115,78 @@ class IntentClassifierTests(TestCase):
 
         self.assertIn(ToolName.MARKET, plan.tools_to_use)
         self.assertIn(ToolName.NEWS, plan.tools_to_use)
+
+    def test_preserves_english_report_quarter_in_fallback_query(self) -> None:
+        classifier = IntentClassifier(
+            settings=SimpleNamespace(
+                google_api_key="",
+                google_api_keys=[],
+                gemini_model="gemini-test",
+                tzinfo=timezone.utc,
+            )
+        )
+
+        plan = classifier.classify("ACB review opinion quarter 2 2025")
+
+        self.assertEqual(plan.primary_intent, ToolName.FINANCIAL_REPORTS.value)
+        self.assertEqual(plan.tool_queries["financial_reports"], "ACB reviewed financial statements Q2 2025 opinion")
+
+    def test_prefers_specific_fallback_reports_query_over_generic_model_query(self) -> None:
+        classifier = IntentClassifier(
+            settings=SimpleNamespace(
+                google_api_key="present-key",
+                google_api_keys=["present-key"],
+                gemini_model="gemini-test",
+                tzinfo=timezone.utc,
+            )
+        )
+        question = "ACB review opinion quarter 2 2025"
+        fallback_plan = build_rule_based_intent_plan(question)
+
+        plan = classifier._plan_from_payload(
+            question,
+            {
+                "primary_intent": "financial_reports",
+                "normalized_query": question,
+                "tools_to_use": ["financial_reports"],
+                "tool_queries": {"financial_reports": "financial report for ACB"},
+                "entities": {"tickers": ["ACB"]},
+                "time_constraints": {},
+                "analysis_requirements": {"financial_reports": True},
+                "reasoning_brief": "generic model output",
+                "confidence": 0.8,
+            },
+            fallback_plan,
+        )
+
+        self.assertEqual(plan.tool_queries["financial_reports"], "ACB reviewed financial statements Q2 2025 opinion")
+
+    def test_preserves_metric_report_question_in_tool_query(self) -> None:
+        classifier = IntentClassifier(
+            settings=SimpleNamespace(
+                google_api_key="present-key",
+                google_api_keys=["present-key"],
+                gemini_model="gemini-test",
+                tzinfo=timezone.utc,
+            )
+        )
+        question = "Trong báo cáo tài chính quý 2 năm 2025 của ACB, Tổng tài sản tại ngày 30/06/2025 là bao nhiêu?"
+        fallback_plan = build_rule_based_intent_plan(question)
+
+        plan = classifier._plan_from_payload(
+            question,
+            {
+                "primary_intent": "financial_reports",
+                "normalized_query": "What were the total assets of ACB as of June 30, 2025, according to its Q2 2025 financial report?",
+                "tools_to_use": ["financial_reports"],
+                "tool_queries": {"financial_reports": "ACB reviewed financial statements Q2 2025 opinion"},
+                "entities": {"tickers": ["ACB"]},
+                "time_constraints": {"explicit_dates": ["2025-06-30"]},
+                "analysis_requirements": {"financial_reports": True},
+                "reasoning_brief": "metric query from financial report",
+                "confidence": 0.95,
+            },
+            fallback_plan,
+        )
+
+        self.assertEqual(plan.tool_queries["financial_reports"], question)

@@ -344,7 +344,10 @@ VIEW_STATEMENTS: list[str] = [
             api_intraday_value,
             updated_at
         FROM intraday_prices
-        WHERE trading_date = ((NOW() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date)
+        WHERE trading_date = (
+            SELECT MAX(latest_intraday.trading_date)
+            FROM intraday_prices AS latest_intraday
+        )
         ORDER BY ticker, "timestamp" DESC
     ) AS ip
         ON s.ticker = ip.ticker

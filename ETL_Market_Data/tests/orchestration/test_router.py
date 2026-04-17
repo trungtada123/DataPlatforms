@@ -96,3 +96,24 @@ class ToolRouterTests(TestCase):
 
         self.assertEqual(requests, [])
         self.assertEqual(router.unsupported_tools(plan), [ToolName.FINANCIAL_REPORTS])
+
+    def test_routes_financial_reports_plan_when_tool_is_enabled(self) -> None:
+        router = ToolRouter(enabled_tools=[ToolName.MARKET, ToolName.NEWS, ToolName.FINANCIAL_REPORTS])
+        plan = IntentPlan(
+            original_query="Báo cáo tài chính quý 1 của HPG",
+            normalized_query="Báo cáo tài chính quý 1 của HPG",
+            tools_to_use=[ToolName.FINANCIAL_REPORTS],
+            tool_queries={"financial_reports": "Báo cáo tài chính quý 1 của HPG"},
+            entities={"tickers": ["HPG"]},
+            time_constraints={},
+            analysis_requirements={"financial_reports": True},
+            reasoning_brief="financial report query",
+            primary_intent=ToolName.FINANCIAL_REPORTS.value,
+            confidence=0.8,
+        )
+
+        requests = router.route(plan)
+
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0].tool_name, ToolName.FINANCIAL_REPORTS)
+        self.assertEqual(router.unsupported_tools(plan), [])

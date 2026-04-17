@@ -69,8 +69,9 @@ def get_news_tool_settings(settings: Settings | None = None) -> NewsToolSettings
     """
 
     base_settings = settings or get_settings()
-    artifact_root = Path(os.getenv("NEWS_ARTIFACT_ROOT", "")).expanduser()
-    if not artifact_root:
+    artifact_root_raw = os.getenv("NEWS_ARTIFACT_ROOT", "").strip()
+    artifact_root = Path(artifact_root_raw).expanduser() if artifact_root_raw else None
+    if artifact_root is None:
         artifact_root = PROJECT_ROOT / "news_artifacts"
     elif not artifact_root.is_absolute():
         artifact_root = PROJECT_ROOT / artifact_root

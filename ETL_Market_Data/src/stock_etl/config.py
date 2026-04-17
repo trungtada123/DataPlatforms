@@ -16,6 +16,20 @@ from .symbols import DEFAULT_SYMBOLS
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ENV_FILE = PROJECT_ROOT / ".env"
+ENV_FILE_ENV_VAR = "STOCK_ETL_ENV_FILE"
+
+
+def _resolve_env_file() -> Path:
+    """Xác định file env đang được runtime ưu tiên sử dụng.
+
+    Returns:
+        Đường dẫn tuyệt đối đến file env cần nạp.
+    """
+
+    env_override = os.getenv(ENV_FILE_ENV_VAR, "").strip()
+    if not env_override:
+        return ENV_FILE
+    return Path(env_override).expanduser()
 
 
 def _split_csv(raw: str | None, fallback: list[str]) -> list[str]:
@@ -117,7 +131,7 @@ def _validate_numeric_settings(settings: Settings) -> None:
 def get_settings() -> Settings:
     """Load settings from `.env` and process environment overrides."""
 
-    load_dotenv(ENV_FILE, override=False)
+    load_dotenv(_resolve_env_file(), override=False)
     tracked_symbols = _split_csv(os.getenv("TRACKED_SYMBOLS"), DEFAULT_SYMBOLS)
     google_api_keys = _split_secret_csv(
         os.getenv("GOOGLE_API_KEYS"),

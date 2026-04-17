@@ -151,6 +151,16 @@ class IntentClassifier:
         for key, value in raw_tool_queries.items():
             if value:
                 tool_queries[str(key)] = str(value)
+        fallback_reports_query = fallback_plan.tool_queries.get(ToolName.FINANCIAL_REPORTS.value)
+        current_reports_query = tool_queries.get(ToolName.FINANCIAL_REPORTS.value)
+        if self._is_metric_report_question(question) and ToolName.FINANCIAL_REPORTS in tools_to_use:
+            tool_queries[ToolName.FINANCIAL_REPORTS.value] = question
+        elif (
+            fallback_reports_query
+            and current_reports_query
+            and self._should_prefer_fallback_reports_query(fallback_reports_query, current_reports_query)
+        ):
+            tool_queries[ToolName.FINANCIAL_REPORTS.value] = fallback_reports_query
         for tool in tools_to_use:
             tool_queries.setdefault(tool.value, normalized_query)
 
@@ -191,6 +201,50 @@ class IntentClassifier:
             primary_intent=primary_intent,
             classifier_mode="gemini",
             confidence=normalized_confidence,
+        )
+
+    @staticmethod
+    def _should_prefer_fallback_reports_query(fallback_query: str, current_query: str) -> bool:
+        """Giữ query reports cụ thể hơn nếu model làm rơi mốc thời gian/ý định kiểm toán."""
+
+        fallback_normalized = fallback_query.casefold()
+        current_normalized = current_query.casefold()
+        fallback_has_year = re.search(r"\b20\d{2}\b", fallback_normalized) is not None
+        fallback_has_quarter = re.search(r"\bq[1-4]\b", fallback_normalized) is not None
+        fallback_has_opinion = any(token in fallback_normalized for token in ["opinion", "review", "audit"])
+        current_has_year = re.search(r"\b20\d{2}\b", current_normalized) is not None
+        current_has_quarter = re.search(r"\bq[1-4]\b", current_normalized) is not None
+        current_has_opinion = any(token in current_normalized for token in ["opinion", "review", "audit"])
+
+        return (
+            (fallback_has_year and not current_has_year)
+            or (fallback_has_quarter and not current_has_quarter)
+            or (fallback_has_opinion and not current_has_opinion)
+        )
+
+    @staticmethod
+    def _is_metric_report_question(question: str) -> bool:
+        """Giữ nguyên câu hỏi reports dạng lấy chỉ tiêu/số liệu trong bảng."""
+
+        normalized = question.casefold()
+        metric_keywords = (
+            "tổng tài sản",
+            "cho vay khách hàng",
+            "tiền gửi của khách hàng",
+            "lợi nhuận sau thuế",
+            "total assets",
+            "customer loans",
+            "customer deposits",
+            "profit after tax",
+        )
+        report_keywords = (
+            "báo cáo tài chính",
+            "bao cao tai chinh",
+            "financial report",
+            "financial statements",
+        )
+        return any(metric in normalized for metric in metric_keywords) and any(
+            keyword in normalized for keyword in report_keywords
         )
 
     @staticmethod

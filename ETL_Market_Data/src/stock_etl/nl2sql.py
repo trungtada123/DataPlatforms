@@ -204,6 +204,47 @@ CROSS JOIN price_2
     return sql, reasoning
 
 
+def _build_simple_market_sql(question: str) -> tuple[str, str] | None:
+    """Dựng SQL heuristic cho một số câu hỏi market phổ biến khi Gemini không khả dụng.
+
+    Args:
+        question: Câu hỏi gốc của người dùng hoặc tool query đã được router tách ra.
+
+    Returns:
+        Tuple gồm SQL và reasoning ngắn nếu match được mẫu hỗ trợ; ngược lại trả về `None`.
+    """
+
+    normalized = _normalize_question(question)
+    ticker = _extract_symbol_from_question(question)
+    if not ticker:
+        return None
+
+    asks_current_price = any(
+        token in normalized
+        for token in [
+            "current price",
+            "latest price",
+            "stock price",
+            "share price",
+            "gia hien tai",
+            "gia moi nhat",
+            "gia hom nay",
+        ]
+    )
+    if asks_current_price:
+        sql = f"""
+SELECT ticker, close AS current_price, timestamp
+FROM vw_intraday_latest_llm
+WHERE ticker = '{ticker}'
+ORDER BY timestamp DESC
+LIMIT 1
+""".strip()
+        reasoning = f"Truy vấn giá hiện tại của {ticker} từ dữ liệu intraday mới nhất đang có trong database."
+        return sql, reasoning
+
+    return None
+
+
 def _recover_sql(question: str, error_message: str) -> tuple[str, str] | None:
     lowered_error = error_message.lower()
     comparison_sql = _build_date_comparison_sql(question)
@@ -359,9 +400,16 @@ class GeminiSQLAssistant:
             sql = _validate_sql(sql)
         else:
             sql_prompt = SQL_PROMPT_TEMPLATE.format(today=today, question=normalized_question)
-            sql_payload = _extract_json_block(self._generate_with_retry(sql_prompt))
-            sql = _validate_sql(sql_payload["sql"])
-            reasoning = sql_payload.get("explanation")
+            try:
+                sql_payload = _extract_json_block(self._generate_with_retry(sql_prompt))
+                sql = _validate_sql(sql_payload["sql"])
+                reasoning = sql_payload.get("explanation")
+            except Exception:
+                heuristic_sql = _build_simple_market_sql(normalized_question)
+                if heuristic_sql is None:
+                    raise
+                sql, reasoning = heuristic_sql
+                sql = _validate_sql(sql)
 
         try:
             rows = execute_readonly_sql(sql)

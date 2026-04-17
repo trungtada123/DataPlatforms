@@ -5,5 +5,9 @@ pandas==2.1.4
 psycopg2-binary==2.9.10
 python-dotenv==1.0.1
 requests==2.32.3
+ddgs==9.13.1
+crawl4ai==0.8.6
+qdrant-client==1.14.2
+sentence-transformers==3.4.1
 SQLAlchemy==1.4.54
 uvicorn[standard]==0.34.0
