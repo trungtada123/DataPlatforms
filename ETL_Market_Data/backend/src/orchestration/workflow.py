@@ -1,0 +1,433 @@
+"""LangGraph-compatible orchestration workflow with safe sequential fallback."""
+
+from __future__ import annotations
+
+import threading
+import uuid
+from typing import Any, Protocol, cast
+
+from agents._legacy import ensure_legacy_src_on_path
+from schemas.orchestration import (
+    DebugTrace,
+    IntentPlan,
+    NormalizedQueryResponse,
+    ToolExecutionResult,
+    ToolExecutionStatus,
+    ToolName,
+    TraceEvent,
+)
+
+from .nodes import (
+    classify,
+    merge,
+    route,
+    run_financial_agent,
+    run_market_agent,
+    run_news_agent,
+    synthesize,
+)
+from .state import OrchestrationState, build_initial_state
+
+ensure_legacy_src_on_path()
+
+
+class _WorkflowRunner(Protocol):
+    def invoke(self, state: OrchestrationState) -> OrchestrationState: ...
+
+    async def ainvoke(self, state: OrchestrationState) -> OrchestrationState: ...
+
+
+class _SequentialWorkflow:
+    """Deterministic sequential runner used when LangGraph is unavailable."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def invoke(self, state: OrchestrationState) -> OrchestrationState:
+        return _run_sequential_pipeline(state)
+
+    async def ainvoke(self, state: OrchestrationState) -> OrchestrationState:
+        return self.invoke(state)
+
+
+_WORKFLOW: _WorkflowRunner | None = None
+_WORKFLOW_LOCK = threading.Lock()
+
+_TOOL_NODE_RUNNERS = {
+    "market": run_market_agent,
+    "news": run_news_agent,
+    "financial": run_financial_agent,
+    "financial_reports": run_financial_agent,
+}
+
+
+def build_workflow() -> _WorkflowRunner:
+    """Build LangGraph workflow if available, otherwise return safe sequential fallback."""
+
+    langgraph_workflow = _build_langgraph_workflow()
+    if langgraph_workflow is not None:
+        return langgraph_workflow
+    return _SequentialWorkflow(reason="langgraph_not_available")
+
+
+def get_workflow() -> _WorkflowRunner:
+    """Return cached workflow instance."""
+
+    global _WORKFLOW
+    if _WORKFLOW is not None:
+        return _WORKFLOW
+
+    with _WORKFLOW_LOCK:
+        if _WORKFLOW is None:
+            _WORKFLOW = build_workflow()
+    return _WORKFLOW
+
+
+def run_query(
+    query: str,
+    user_id: str | None = None,
+    *,
+    debug: bool = False,
+    trace_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run one orchestration query through workflow and return response payload."""
+
+    trace_id_value = trace_id or uuid.uuid4().hex
+    base_metadata = dict(metadata or {})
+    base_metadata["trace_id"] = trace_id_value
+
+    state = build_initial_state(query=query, user_id=user_id, metadata=base_metadata)
+    workflow = get_workflow()
+    try:
+        final_state = workflow.invoke(state)
+    except Exception as exc:  # noqa: BLE001
+        return _build_error_response(query=query, trace_id=trace_id_value, error=str(exc), debug=debug)
+
+    return _state_to_response(final_state, trace_id=trace_id_value, debug=debug)
+
+
+def _build_langgraph_workflow() -> _WorkflowRunner | None:
+    try:
+        from langgraph.graph import END, START, StateGraph
+    except Exception:
+        return None
+
+    try:
+        graph = StateGraph(OrchestrationState)
+        graph.add_node("classify", classify)
+        graph.add_node("route", route)
+        graph.add_node("execute_tools", _execute_selected_tools)
+        graph.add_node("merge", merge)
+        graph.add_node("synthesize", synthesize)
+
+        graph.add_edge(START, "classify")
+        graph.add_edge("classify", "route")
+        graph.add_edge("route", "execute_tools")
+        graph.add_edge("execute_tools", "merge")
+        graph.add_edge("merge", "synthesize")
+        graph.add_edge("synthesize", END)
+        return cast(_WorkflowRunner, graph.compile())
+    except Exception:
+        return None
+
+
+def _run_sequential_pipeline(initial_state: OrchestrationState) -> OrchestrationState:
+    state = initial_state
+    for node in (classify, route, _execute_selected_tools, merge, synthesize):
+        update = node(state)
+        state = _apply_update(state, update)
+    return state
+
+
+def _execute_selected_tools(state: OrchestrationState) -> dict[str, Any]:
+    """Execute selected tool nodes sequentially and collect partial updates."""
+
+    current_state = state
+    selected_tools = [
+        str(item).strip().lower()
+        for item in (state.get("selected_tools") or [])
+        if str(item).strip()
+    ]
+
+    if not selected_tools:
+        trace = list(state.get("trace", []))
+        errors = list(state.get("errors", []))
+        metadata = dict(state.get("metadata", {}))
+        trace.append(
+            {
+                "step": "execute_tools",
+                "status": "warning",
+                "detail": "No tools selected by router.",
+            }
+        )
+        return {
+            "market_result": state.get("market_result"),
+            "news_result": state.get("news_result"),
+            "financial_result": state.get("financial_result"),
+            "trace": trace,
+            "errors": errors,
+            "metadata": metadata,
+        }
+
+    unknown_tools: list[str] = []
+    for tool_name in selected_tools:
+        runner = _TOOL_NODE_RUNNERS.get(tool_name)
+        if runner is None:
+            unknown_tools.append(tool_name)
+            continue
+        update = runner(current_state)
+        current_state = _apply_update(current_state, update)
+
+    trace = list(current_state.get("trace", []))
+    errors = list(current_state.get("errors", []))
+    metadata = dict(current_state.get("metadata", {}))
+    if unknown_tools:
+        errors.append(f"unknown_tools:{','.join(unknown_tools)}")
+        trace.append(
+            {
+                "step": "execute_tools",
+                "status": "warning",
+                "detail": "Some tools are not recognized by workflow executor.",
+                "metadata": {"unknown_tools": unknown_tools},
+            }
+        )
+
+    return {
+        "market_result": current_state.get("market_result"),
+        "news_result": current_state.get("news_result"),
+        "financial_result": current_state.get("financial_result"),
+        "trace": trace,
+        "errors": errors,
+        "metadata": metadata,
+    }
+
+
+def _apply_update(state: OrchestrationState, update: dict[str, Any]) -> OrchestrationState:
+    merged = dict(state)
+    merged.update(update)
+    return cast(OrchestrationState, merged)
+
+
+def _state_to_response(state: OrchestrationState, *, trace_id: str, debug: bool) -> dict[str, Any]:
+    query = str(state.get("query") or "")
+    metadata = dict(state.get("metadata", {}))
+    errors = list(state.get("errors", []))
+    selected_tools = list(state.get("selected_tools", []))
+
+    tool_results = _collect_tool_results(state)
+    tools_used = _collect_tools_used(tool_results)
+    intent_plan = _resolve_intent_plan(query, metadata.get("intent_plan"))
+    limitations = _collect_limitations(state, errors)
+    status = _resolve_status(tool_results, selected_tools, errors)
+    final_answer = _resolve_answer(state, status)
+
+    debug_trace = None
+    if debug:
+        debug_trace = _build_debug_trace(
+            trace_id=trace_id,
+            trace_items=list(state.get("trace", [])),
+            tools_used=tools_used,
+            errors=errors,
+            metadata=metadata,
+        )
+
+    response = NormalizedQueryResponse(
+        trace_id=trace_id,
+        status=status,
+        original_query=query,
+        normalized_query=intent_plan.normalized_query,
+        answer=final_answer,
+        intent_plan=intent_plan,
+        tools_used=tools_used,
+        results=tool_results,
+        limitations=limitations,
+        debug_trace=debug_trace,
+    )
+    return response.model_dump(mode="json")
+
+
+def _build_error_response(*, query: str, trace_id: str, error: str, debug: bool) -> dict[str, Any]:
+    intent_plan = _default_intent_plan(query)
+    debug_trace = None
+    if debug:
+        debug_trace = DebugTrace(
+            trace_id=trace_id,
+            fallback_reason="workflow_runtime_error",
+            events=[
+                TraceEvent(
+                    step="workflow",
+                    status="error",
+                    detail="Workflow execution failed.",
+                    metadata={"error": error},
+                )
+            ],
+        )
+
+    response = NormalizedQueryResponse(
+        trace_id=trace_id,
+        status="error",
+        original_query=query,
+        normalized_query=query.strip(),
+        answer="Khong the xu ly query o thoi diem hien tai.",
+        intent_plan=intent_plan,
+        tools_used=[],
+        results=[],
+        limitations=["Workflow runtime error."],
+        debug_trace=debug_trace,
+    )
+    return response.model_dump(mode="json")
+
+
+def _collect_tool_results(state: OrchestrationState) -> list[ToolExecutionResult]:
+    output: list[ToolExecutionResult] = []
+    for key in ("market_result", "news_result", "financial_result"):
+        agent_result = state.get(key)
+        if agent_result is None:
+            continue
+        output.extend(agent_result.results)
+    return output
+
+
+def _collect_tools_used(results: list[ToolExecutionResult]) -> list[ToolName]:
+    tools: list[ToolName] = []
+    for result in results:
+        if result.tool_name not in tools:
+            tools.append(result.tool_name)
+    return tools
+
+
+def _resolve_intent_plan(query: str, payload: Any) -> IntentPlan:
+    if isinstance(payload, dict):
+        try:
+            return IntentPlan.model_validate(payload)
+        except Exception:
+            pass
+    return _default_intent_plan(query)
+
+
+def _default_intent_plan(query: str) -> IntentPlan:
+    normalized = query.strip()
+    return IntentPlan(
+        original_query=query,
+        normalized_query=normalized,
+        tools_to_use=[],
+        tool_queries={},
+        entities={},
+        time_constraints={},
+        analysis_requirements={},
+        reasoning_brief="workflow_default_intent",
+        primary_intent="unknown",
+        classifier_mode="workflow_fallback",
+        confidence=0.0,
+    )
+
+
+def _collect_limitations(state: OrchestrationState, errors: list[str]) -> list[str]:
+    limitations: list[str] = []
+    for key in ("market_result", "news_result", "financial_result"):
+        agent_result = state.get(key)
+        if agent_result is None:
+            continue
+        for item in agent_result.limitations:
+            normalized = str(item).strip()
+            if normalized and normalized not in limitations:
+                limitations.append(normalized)
+    for item in errors:
+        normalized = str(item).strip()
+        if normalized and normalized not in limitations:
+            limitations.append(normalized)
+    return limitations
+
+
+def _resolve_status(
+    results: list[ToolExecutionResult],
+    selected_tools: list[str],
+    errors: list[str],
+) -> str:
+    if not results:
+        if selected_tools:
+            return "error" if errors else "no_data"
+        return "no_route"
+
+    has_success = any(result.status == ToolExecutionStatus.SUCCESS for result in results)
+    has_no_data = any(result.status == ToolExecutionStatus.NO_DATA for result in results)
+    has_error = any(result.status == ToolExecutionStatus.ERROR for result in results)
+    has_not_supported = any(result.status == ToolExecutionStatus.NOT_SUPPORTED_YET for result in results)
+
+    if has_success:
+        if has_no_data or has_error or has_not_supported:
+            return "partial_success"
+        return "success"
+    if has_no_data and (has_error or has_not_supported):
+        return "partial_no_data"
+    if has_no_data:
+        return "no_data"
+    if has_not_supported:
+        return "not_supported_yet"
+    return "error"
+
+
+def _resolve_answer(state: OrchestrationState, status: str) -> str:
+    final_answer = str(state.get("final_answer") or "").strip()
+    if final_answer:
+        return final_answer
+
+    for key in ("market_result", "news_result", "financial_result"):
+        agent_result = state.get(key)
+        if agent_result is None:
+            continue
+        answer = str(agent_result.answer or "").strip()
+        if answer:
+            return answer
+
+    if status == "no_route":
+        return "Chua co tool phu hop de xu ly query trong workflow hien tai."
+    if status == "no_data":
+        return "Khong tim thay du lieu phu hop cho query hien tai."
+    return "Khong the tong hop cau tra loi o thoi diem hien tai."
+
+
+def _build_debug_trace(
+    *,
+    trace_id: str,
+    trace_items: list[dict[str, Any]],
+    tools_used: list[ToolName],
+    errors: list[str],
+    metadata: dict[str, Any],
+) -> DebugTrace:
+    events: list[TraceEvent] = []
+    for item in trace_items:
+        if not isinstance(item, dict):
+            continue
+        step = str(item.get("step") or "workflow")
+        status = str(item.get("status") or "ok")
+        detail = item.get("detail")
+        duration_ms = item.get("duration_ms")
+        event_metadata = item.get("metadata")
+        events.append(
+            TraceEvent(
+                step=step,
+                status=status,
+                detail=str(detail) if detail is not None else None,
+                duration_ms=float(duration_ms) if isinstance(duration_ms, (int, float)) else None,
+                metadata=event_metadata if isinstance(event_metadata, dict) else {},
+            )
+        )
+
+    fallback_reason = None
+    if errors:
+        fallback_reason = "workflow_node_error"
+
+    return DebugTrace(
+        trace_id=trace_id,
+        requested_tools=list(tools_used),
+        chosen_tools=list(tools_used),
+        unsupported_tools=[],
+        fallback_reason=fallback_reason,
+        events=events,
+        metadata=metadata,
+    )
+
+
+__all__ = ["build_workflow", "get_workflow", "run_query"]

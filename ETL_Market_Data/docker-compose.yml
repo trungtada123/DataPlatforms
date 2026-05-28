@@ -11,7 +11,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
-      - "55432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -20,26 +19,151 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  postgres-bootstrap:
-    image: postgres:16
-    container_name: ssi-postgres-bootstrap
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    container_name: ssi-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  minio:
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    container_name: ssi-minio
+    restart: unless-stopped
     env_file:
       - .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: ssi-rabbitmq
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./configs/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    container_name: ssi-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/backend/src
+      STOCK_ETL_ENV_FILE: /app/.env
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      FINANCIAL_REPORTS_QDRANT_URL: ${FINANCIAL_REPORTS_QDRANT_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST}
     depends_on:
       postgres:
         condition: service_healthy
-    command: >
-      bash -lc "
-      export PGPASSWORD=${POSTGRES_PASSWORD};
-      until psql -h postgres -U ${POSTGRES_USER} -d postgres -tc 'SELECT 1' >/dev/null 2>&1; do sleep 2; done;
-      psql -h postgres -U ${POSTGRES_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'\" | grep -q 1 || psql -h postgres -U ${POSTGRES_USER} -d postgres -c \"CREATE DATABASE ${POSTGRES_DB}\";
-      psql -h postgres -U ${POSTGRES_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname='${AIRFLOW_POSTGRES_DB}'\" | grep -q 1 || psql -h postgres -U ${POSTGRES_USER} -d postgres -c \"CREATE DATABASE ${AIRFLOW_POSTGRES_DB}\";
-      "
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    ports:
+      - "8000:8000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: ssi-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/backend/src
+      STOCK_ETL_ENV_FILE: /app/.env
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: ssi-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      backend:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: ssi-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
 
   airflow-init:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/airflow.Dockerfile
     container_name: ssi-airflow-init
     env_file:
       - .env
@@ -54,8 +178,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      postgres-bootstrap:
-        condition: service_completed_successfully
     volumes:
       - ./:/opt/airflow
     command: >
@@ -63,11 +185,12 @@ services:
       airflow db migrate &&
       airflow users create --username ${AIRFLOW_ADMIN_USERNAME} --password ${AIRFLOW_ADMIN_PASSWORD} --firstname SSI --lastname Admin --role Admin --email ${AIRFLOW_ADMIN_EMAIL} || true
       "
+    profiles: ["airflow"]
 
   airflow-webserver:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/airflow.Dockerfile
     container_name: ssi-airflow-webserver
     restart: unless-stopped
     env_file:
@@ -91,11 +214,12 @@ services:
     command: webserver
     ports:
       - "8080:8080"
+    profiles: ["airflow"]
 
   airflow-scheduler:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/airflow.Dockerfile
     container_name: ssi-airflow-scheduler
     restart: unless-stopped
     env_file:
@@ -117,36 +241,13 @@ services:
       - ./:/opt/airflow
       - airflow_logs:/opt/airflow/logs
     command: scheduler
-
-  stock-qa-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: ssi-stock-qa-api
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      PYTHONPATH: /opt/airflow/src
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./:/opt/airflow
-    entrypoint: ["/bin/bash", "-lc", "uvicorn stock_etl.api:app --host 0.0.0.0 --port 8000"]
-    ports:
-      - "8000:8000"
-
-  adminer:
-    image: adminer:4
-    container_name: ssi-adminer
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8081:8080"
+    profiles: ["airflow"]
 
 volumes:
   postgres_data:
+  qdrant_data:
+  minio_data:
+  rabbitmq_data:
   airflow_logs:
+  prometheus_data:
+  grafana_data:
