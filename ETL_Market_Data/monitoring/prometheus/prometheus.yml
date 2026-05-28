@@ -8,9 +8,3 @@ scrape_configs:
     static_configs:
       - targets:
           - ssi-backend:8000
-
-  - job_name: airflow-webserver
-    metrics_path: /health
-    static_configs:
-      - targets:
-          - airflow-webserver:8080

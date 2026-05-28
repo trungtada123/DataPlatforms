@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from typing import Any
 
 from stock_etl.orchestration.contracts import ToolName
@@ -16,6 +17,51 @@ _TOOL_NAME_MAP = {
     ToolName.NEWS.value: "news",
     ToolName.FINANCIAL_REPORTS.value: "financial",
 }
+_NEWS_HINTS = (
+    "tin tuc",
+    "tin moi nhat",
+    "ban tin",
+    "news",
+    "headline",
+)
+_MARKET_HINTS = (
+    "gia",
+    "dong cua",
+    "ma20",
+    "ma50",
+    "ma200",
+    "macd",
+    "rsi",
+    "khoi luong",
+    "volume",
+    "so sanh",
+    "phan ung",
+    "intraday",
+)
+
+
+def _normalize_text(value: str) -> str:
+    lowered = value.lower().replace("đ", "d")
+    normalized = unicodedata.normalize("NFD", lowered)
+    collapsed = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    return " ".join(collapsed.split())
+
+
+def _should_force_news_only(query: str, plan_payload: dict[str, Any], selected_tools: list[str]) -> bool:
+    if "market" not in selected_tools or "news" not in selected_tools:
+        return False
+
+    analysis = plan_payload.get("analysis_requirements")
+    if not isinstance(analysis, dict):
+        return False
+
+    if not analysis.get("news") or analysis.get("financial_reports"):
+        return False
+
+    normalized_query = _normalize_text(query)
+    has_news_signal = any(keyword in normalized_query for keyword in _NEWS_HINTS)
+    has_market_signal = any(keyword in normalized_query for keyword in _MARKET_HINTS)
+    return has_news_signal and not has_market_signal
 
 
 def route(state: OrchestrationState) -> dict[str, Any]:
@@ -72,6 +118,9 @@ def route(state: OrchestrationState) -> dict[str, Any]:
         if mapped and mapped in _ALLOWED_TOOLS and mapped not in selected_tools:
             selected_tools.append(mapped)
 
+    if _should_force_news_only(str(state.get("query", "")), plan_payload, selected_tools):
+        selected_tools = ["news"]
+
     trace.append(
         {
             "step": "router",
@@ -90,4 +139,3 @@ def route(state: OrchestrationState) -> dict[str, Any]:
         "errors": errors,
         "metadata": metadata,
     }
-

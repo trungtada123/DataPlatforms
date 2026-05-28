@@ -16,3 +16,9 @@
   - `.env.example`
   - `.env.local.example`
   - `.env.docker.example`
+
+## Monitoring Limitation: Airflow Metrics Scrape
+
+- Prometheus scrape for `airflow-webserver` has been disabled because the prior target used `/health` JSON, which is not Prometheus text format.
+- Backend metrics scraping remains enabled via `/metrics`.
+- To monitor Airflow in Prometheus, configure a real metrics endpoint/exporter and then re-enable an Airflow scrape job.
