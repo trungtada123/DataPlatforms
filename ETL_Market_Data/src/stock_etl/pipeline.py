@@ -10,9 +10,7 @@ from typing import Any
 from .config import Settings, get_settings
 from .database import (
     cleanup_intraday_before,
-    ensure_schema,
     fetch_raw_rows_for_symbol,
-    get_engine,
     get_session_factory,
     upsert_feature_rows,
     upsert_intraday_rows,
@@ -81,7 +79,6 @@ def bootstrap_history(
     """Initial backfill from the configured start date until the target end date."""
 
     settings = get_settings()
-    ensure_schema(get_engine())
 
     start_date = start_date or settings.bootstrap_start_date
     end_date = end_date or local_today(settings)
@@ -131,7 +128,6 @@ def refresh_intraday_session(
     """Scheduled micro-batch refresh for the current trading session."""
 
     settings = get_settings()
-    ensure_schema(get_engine())
 
     trading_date = trading_date or local_today(settings)
     active_symbols = _resolve_symbols(symbols, settings)
@@ -178,7 +174,6 @@ def finalize_end_of_day(
     """Finalize the trading day by persisting raw EOD rows and recomputing features."""
 
     settings = get_settings()
-    ensure_schema(get_engine())
 
     trading_date = trading_date or local_today(settings)
     active_symbols = _resolve_symbols(symbols, settings)
