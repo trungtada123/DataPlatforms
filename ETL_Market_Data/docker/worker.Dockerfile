@@ -12,5 +12,5 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY backend /app/backend
 COPY src /app/src
 
-# Placeholder worker command for infrastructure phase.
-CMD ["python", "-c", "import time; print('worker placeholder is running'); time.sleep(3600)"]
+# Financial ingestion worker entrypoint.
+CMD ["python", "-m", "ingestion.financial_reports.rabbitmq_consumer"]
