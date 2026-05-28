@@ -14,11 +14,25 @@ exports/*.dump
 !exports/.gitkeep
 !exports/ssi_market_stock_only.dump
 
-# Artifact crawl/query sinh ra ở root theo query_id hash 32 ký tự hex
+# Artifact crawl/query hash directories at repo root
 /[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
 
-# Notebook/checkpoint và file local sinh ra khi test thủ công
+# Notebook/checkpoints
 .ipynb_checkpoints/
 
-# Parsed financial reports chỉ dùng local/dev, không commit vào repo chính
+# Parsed financial reports local/dev outputs
 data/financial_reports/parsed_output/
+
+# Additional local/runtime artifacts
+.venv/
+venv/
+node_modules/
+dist/
+mlruns/
+data/
+*.log
+*.tmp
+
+# Local credential exports/service accounts
+*service-account*.json
+*credentials*.json

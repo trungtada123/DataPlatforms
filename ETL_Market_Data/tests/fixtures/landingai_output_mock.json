@@ -1,0 +1,30 @@
+{
+  "doc_id": "ACB_Q2_2024",
+  "metadata": {
+    "ticker": "ACB",
+    "period": "Q2",
+    "fiscal_year": 2024,
+    "source": "landingai-mock"
+  },
+  "pages": [
+    {
+      "page": 1,
+      "markdown": "# Tong quan\nDoanh thu thuan trong ky dat muc tang truong on dinh.\nChi phi hoat dong duoc kiem soat chat che.\n\n## Bang ket qua kinh doanh\n| Chi tieu | Q2/2024 | Q2/2023 |\n| --- | ---: | ---: |\n| Doanh thu thuan | 1250 | 1180 |\n| Loi nhuan sau thue | 320 | 290 |\n"
+    },
+    {
+      "page": 2,
+      "markdown": "# Luu chuyen tien te\nDong tien tu hoat dong kinh doanh duong va cai thien.\nNo vay ngan han giam nhe so voi dau ky.\n"
+    }
+  ],
+  "tables": [
+    {
+      "page": 1,
+      "section_title": "Bang ket qua kinh doanh",
+      "header": ["Chi tieu", "Q2/2024", "Q2/2023"],
+      "rows": [
+        ["Doanh thu thuan", "1250", "1180"],
+        ["Loi nhuan sau thue", "320", "290"]
+      ]
+    }
+  ]
+}
