@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pendulum
 from airflow.decorators import dag, task
 
@@ -18,6 +20,11 @@ def build_intraday_dag(dag_id: str, schedule: str) -> None:
         start_date=pendulum.datetime(2026, 4, 14, tz=LOCAL_TZ),
         catchup=False,
         max_active_runs=1,
+        default_args={
+            "retries": 2,
+            "retry_delay": timedelta(minutes=2),
+            "execution_timeout": timedelta(minutes=20),
+        },
         tags=["ssi", "intraday"],
     )
     def _dag() -> None:
@@ -38,6 +45,11 @@ def build_intraday_dag(dag_id: str, schedule: str) -> None:
     start_date=pendulum.datetime(2026, 4, 14, tz=LOCAL_TZ),
     catchup=False,
     max_active_runs=1,
+    default_args={
+        "retries": 2,
+        "retry_delay": timedelta(minutes=2),
+        "execution_timeout": timedelta(minutes=45),
+    },
     tags=["ssi", "intraday", "eod"],
 )
 def ssi_intraday_session_close() -> None:

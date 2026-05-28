@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pendulum
 from airflow.decorators import dag, task
+from datetime import timedelta
 
 
 LOCAL_TZ = pendulum.timezone("Asia/Ho_Chi_Minh")
@@ -14,6 +15,12 @@ LOCAL_TZ = pendulum.timezone("Asia/Ho_Chi_Minh")
     schedule=None,
     start_date=pendulum.datetime(2026, 4, 14, tz=LOCAL_TZ),
     catchup=False,
+    default_args={
+        "retries": 2,
+        "retry_delay": timedelta(minutes=2),
+        "execution_timeout": timedelta(hours=2),
+    },
+    max_active_runs=1,
     tags=["ssi", "bootstrap"],
 )
 def ssi_bootstrap_history() -> None:

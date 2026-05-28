@@ -111,13 +111,32 @@ def normalize_daily_raw_rows(symbol: str, raw_rows: Iterable[dict[str, Any]]) ->
         if trading_date is None:
             continue
 
+        raw_ref_price = _to_float(raw.get("RefPrice"))
+        raw_ceiling_price = _to_float(raw.get("CeilingPrice"))
+        raw_floor_price = _to_float(raw.get("FloorPrice"))
+
+        anomaly_ref_zero = raw_ref_price == 0
+        anomaly_ceiling_zero = raw_ceiling_price == 0
+        anomaly_floor_zero = raw_floor_price == 0
+        anomaly_reason_parts: list[str] = []
+        if anomaly_ref_zero:
+            anomaly_reason_parts.append("ref_price_zero")
+        if anomaly_ceiling_zero:
+            anomaly_reason_parts.append("ceiling_price_zero")
+        if anomaly_floor_zero:
+            anomaly_reason_parts.append("floor_price_zero")
+
         rows.append(
             {
                 "ticker": symbol.upper(),
                 "trading_date": trading_date,
-                "ref_price": _to_float(raw.get("RefPrice")),
-                "ceiling_price": _to_float(raw.get("CeilingPrice")),
-                "floor_price": _to_float(raw.get("FloorPrice")),
+                "ref_price": None if anomaly_ref_zero else raw_ref_price,
+                "ceiling_price": None if anomaly_ceiling_zero else raw_ceiling_price,
+                "floor_price": None if anomaly_floor_zero else raw_floor_price,
+                "anomaly_ref_zero": anomaly_ref_zero,
+                "anomaly_ceiling_zero": anomaly_ceiling_zero,
+                "anomaly_floor_zero": anomaly_floor_zero,
+                "anomaly_reason": ",".join(anomaly_reason_parts) if anomaly_reason_parts else None,
                 "open_price": _to_float(_first_present(raw, "OpenPrice", "Open")),
                 "high_price": _to_float(_first_present(raw, "HighestPrice", "HighPrice", "High")),
                 "low_price": _to_float(_first_present(raw, "LowestPrice", "LowPrice", "Low")),

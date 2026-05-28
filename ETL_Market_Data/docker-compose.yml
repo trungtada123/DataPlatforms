@@ -32,6 +32,7 @@ services:
       bash -lc "
       export PGPASSWORD=${POSTGRES_PASSWORD};
       until psql -h postgres -U ${POSTGRES_USER} -d postgres -tc 'SELECT 1' >/dev/null 2>&1; do sleep 2; done;
+      psql -h postgres -U ${POSTGRES_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname='${POSTGRES_DB}'\" | grep -q 1 || psql -h postgres -U ${POSTGRES_USER} -d postgres -c \"CREATE DATABASE ${POSTGRES_DB}\";
       psql -h postgres -U ${POSTGRES_USER} -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname='${AIRFLOW_POSTGRES_DB}'\" | grep -q 1 || psql -h postgres -U ${POSTGRES_USER} -d postgres -c \"CREATE DATABASE ${AIRFLOW_POSTGRES_DB}\";
       "
 
@@ -48,7 +49,7 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
       AIRFLOW__WEBSERVER__RBAC: "true"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
       PYTHONPATH: /opt/airflow/src
     depends_on:
       postgres:
@@ -77,7 +78,7 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
       AIRFLOW__WEBSERVER__RBAC: "true"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
       PYTHONPATH: /opt/airflow/src
     depends_on:
       postgres:
@@ -105,7 +106,7 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
       AIRFLOW__WEBSERVER__RBAC: "true"
-      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
       PYTHONPATH: /opt/airflow/src
     depends_on:
       postgres:
