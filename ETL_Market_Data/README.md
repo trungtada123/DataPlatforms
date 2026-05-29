@@ -166,7 +166,7 @@ Các URL quan trọng:
 Tài khoản Airflow mặc định:
 
 - Username: `admin`
-- Password: `admin123`
+- Password: `your_airflow_admin_password`
 
 ## 6. Chạy ETL
 
@@ -211,7 +211,7 @@ Mở Adminer:
 - System: `PostgreSQL`
 - Server: `postgres`
 - Username: `stock_user`
-- Password: `stock_pass`
+- Password: `your_postgres_password`
 - Database: `ssi_market`
 
 Nên mở các object sau để chụp hình báo cáo:
