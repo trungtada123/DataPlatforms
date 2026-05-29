@@ -28,7 +28,7 @@ class ErrorResponse(BaseModel):
     detail: str
 
 
-# Backward-compatible aliases with existing stock_etl.api names.
+# Backward-compatible aliases with existing legacy API names.
 AskRequest = QueryRequest
 AskResponse = QueryResponse
 

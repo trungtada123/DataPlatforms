@@ -121,6 +121,13 @@ The following backend files must not be overwritten by legacy migration scripts:
 - Legacy `src/stock_etl/financial_reports_tool/config.py` remains as compatibility shim for old import paths.
 - No Financial business logic, ETL flow, or Qdrant/OCR behavior was changed in this wave.
 
+## Wave 6F Update (Final backend/src legacy dependency cleanup)
+- `backend/src/agents/financial_agent/qa.py` no longer imports or calls `agents._legacy.ensure_legacy_src_on_path`.
+- Financial QA facade now uses canonical backend imports only and keeps existing answer behavior unchanged.
+- `backend/src/schemas/api.py` legacy-named comment was updated to canonical legacy wording only (no schema field changes).
+- `backend/src/agents/_legacy.py` is retained as compatibility helper candidate for final cutover cleanup and was not deleted in this wave.
+- Financial ETL/OCR/Qdrant hardening remains postponed.
+
 ### Backend/src classification for legacy financial references
 - `should invert shim now`: none (already inverted for `financial_reports_tool` path)
 - `should keep bridge temporarily`: not applicable inside `backend/src` for this pattern

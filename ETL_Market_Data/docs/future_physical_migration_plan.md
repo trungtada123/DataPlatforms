@@ -323,3 +323,11 @@ It is planning-only and does not authorize implementation in the current phase.
 - Legacy config path under `src/stock_etl/financial_reports_tool/config.py` remains as compatibility shim for old imports.
 - Financial runtime behavior/settings contract is preserved (same env vars, defaults, and names).
 - Deep Financial ETL/OCR/Qdrant hardening remains postponed.
+
+## Wave 6F Status Update (Final backend/src Legacy Dependency Cleanup)
+- Wave 6F completed as minimal backend runtime dependency cleanup.
+- `backend/src/agents/financial_agent/qa.py` no longer depends on `agents._legacy.ensure_legacy_src_on_path`.
+- Financial QA backend runtime path is legacy-path-free while preserving existing query facade behavior.
+- `backend/src/agents/_legacy.py` remains as compatibility helper only and is kept for final legacy cutover wave.
+- `src/stock_etl` shims remain unchanged by design until approved final removal phase.
+- Deep Financial ETL/OCR/Qdrant hardening remains postponed.

@@ -43,6 +43,17 @@ class FinancialReportsImportTests(TestCase):
         self.assertIsInstance(facade_settings, FinancialSettings)
         self.assertEqual(facade_settings.qdrant_collection, canonical_settings.qdrant_collection)
 
+    def test_canonical_financial_qa_no_longer_uses_legacy_path_injection(self) -> None:
+        from agents.financial_agent import qa as qa_module
+
+        with open(qa_module.__file__, "r", encoding="utf-8") as stream:
+            module_source = stream.read()
+
+        self.assertNotIn("ensure_legacy_src_on_path", module_source)
+        self.assertNotIn("agents._legacy", module_source)
+        self.assertNotIn("stock_etl", module_source)
+        self.assertTrue(callable(qa_module.answer))
+
     def test_legacy_runtime_service_resolves_to_canonical_backend_module(self) -> None:
         from stock_etl.financial_reports_tool.runtime.query_service import FinancialReportsQueryService as LegacyService
 
