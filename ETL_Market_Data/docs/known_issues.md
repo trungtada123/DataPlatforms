@@ -55,6 +55,7 @@
 - Live LandingAI OCR integration is not fully verified end-to-end in production-like load.
 - Financial vector write and retrieval against production-like dataset are not fully validated.
 - Missing data/dependencies may return graceful `no_data`/`error` at runtime.
+- Financial deep hardening (ETL/OCR/Qdrant throughput tuning) remains postponed to a dedicated future wave.
 
 ## Airflow and Infra Limitations
 - Financial ingestion DAG publish flow is in place, but full long-running E2E ops validation is still limited.
@@ -64,6 +65,7 @@
 ## Legacy Coupling
 - Legacy `stock_etl` coupling remains by design in this phase.
 - Compatibility layer (`agents._legacy` and related wrappers) must remain until cutover wave is explicitly approved.
+- For Financial modules, remaining legacy coupling is now primarily compatibility shims plus compatibility-focused tests/docs.
 
 ## News Artifacts Policy
 - `news_artifacts/` contains runtime crawl outputs and should be treated as local runtime artifacts, not source-of-truth fixtures.

@@ -97,6 +97,22 @@ The following backend files must not be overwritten by legacy migration scripts:
 | `dags` | 0 | Financial DAG currently imports canonical `ingestion.financial_reports.*`. |
 | `docs` | 13 | Multiple docs still describe Financial as legacy-backed; update gradually to avoid stale guidance. |
 
+## Wave 6D Update (Import Cleanup Only)
+- Scope: tests/docs cleanup only, no Financial runtime business-logic change.
+- Canonicalized low-risk test imports to backend paths:
+  - `tests/financial_reports_tool/test_query_service.py`
+  - `tests/financial_reports_tool/test_retrieval.py`
+  - `tests/financial_reports_tool/test_rerank.py`
+  - `tests/financial_reports_tool/test_synthesis.py`
+  - `tests/orchestration/test_reports_adapter.py` (financial schemas import only)
+- Kept compatibility coverage intentionally:
+  - `tests/financial_reports_tool/test_imports.py` still validates legacy import paths:
+    - `stock_etl.financial_reports_tool.shared`
+    - `stock_etl.financial_reports_tool.runtime`
+- Policy reaffirmed:
+  - Do not overwrite teammate backend financial modules with legacy `stock_etl` code.
+  - Deep Financial ETL/OCR/Qdrant hardening remains postponed.
+
 ### Backend/src classification for legacy financial references
 - `should invert shim now`: none (already inverted for `financial_reports_tool` path)
 - `should keep bridge temporarily`: not applicable inside `backend/src` for this pattern

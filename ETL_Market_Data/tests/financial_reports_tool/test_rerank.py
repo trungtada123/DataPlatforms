@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.financial_reports_tool.runtime.contracts import ReportCandidate
-from stock_etl.financial_reports_tool.runtime.rerank import rerank_candidate
+from agents.financial_agent.contracts import ReportCandidate
+from agents.financial_agent.rerank import rerank_candidate
 
 
 class FinancialReportsRerankTests(TestCase):

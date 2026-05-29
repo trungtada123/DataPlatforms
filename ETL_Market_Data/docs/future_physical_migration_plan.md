@@ -301,3 +301,18 @@ It is planning-only and does not authorize implementation in the current phase.
 - Do not overwrite `backend/src/agents/financial_agent/*`, `backend/src/ingestion/financial_reports/*`, or `backend/src/core/vector_store.py` with legacy `src/stock_etl/financial_reports_tool/*` code.
 - Financial cleanup must proceed via shim inversion and reconciliation-first strategy (`src/stock_etl` compatibility layer -> backend canonical modules).
 - Deep Financial ETL hardening (OCR quality tuning, Qdrant write/retrieval scaling, full production validation) remains postponed to a separate dedicated wave.
+
+## Wave 6D Status Update (Financial Tests/Scripts/Docs Import Cleanup)
+- Wave 6D completed as import-cleanup only; no runtime business logic changed.
+- Low-risk Financial test imports were moved to canonical backend modules:
+  - `agents.financial_agent.*`
+  - `config.financial`
+- Legacy compatibility import verification is retained in:
+  - `tests/financial_reports_tool/test_imports.py`
+- Financial scripts and DAGs already reference canonical backend ingestion paths and were kept unchanged in this wave.
+- Remaining Financial coupling is now primarily:
+  - legacy shims under `src/stock_etl/financial_reports_tool/*`
+  - compatibility-oriented tests/docs
+- Policy remains strict:
+  - no legacy overwrite into backend Financial modules
+  - deep Financial ETL/OCR/Qdrant hardening is postponed.

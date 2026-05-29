@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.financial_reports_tool.config import FinancialReportsToolSettings
-from stock_etl.financial_reports_tool.runtime.contracts import ReportCandidate
-from stock_etl.financial_reports_tool.runtime.query_service import FinancialReportsQueryService
+from agents.financial_agent.contracts import ReportCandidate
+from agents.financial_agent.service import FinancialReportsQueryService
+from config.financial import FinancialSettings
 
 
 class FakeEmbedder:
@@ -147,8 +147,8 @@ class EmptyStore:
 class FinancialReportsQueryServiceTests(TestCase):
     """Kiểm tra flow query-time của tool reports."""
 
-    def _build_settings(self) -> FinancialReportsToolSettings:
-        return FinancialReportsToolSettings(
+    def _build_settings(self) -> FinancialSettings:
+        return FinancialSettings(
             qdrant_url="http://localhost:6333",
             qdrant_collection="bctc_chunks",
             qdrant_api_key=None,
@@ -164,6 +164,7 @@ class FinancialReportsQueryServiceTests(TestCase):
             groq_max_retries=0,
             groq_retry_delay_seconds=0.0,
             groq_base_url="https://api.groq.com/openai/v1",
+            parsed_output_dir=None,
         )
 
     def test_ask_returns_success_with_ranked_hits_and_contexts(self) -> None:

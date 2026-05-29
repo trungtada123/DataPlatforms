@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.financial_reports_tool.runtime.contracts import ReportCandidate
-from stock_etl.financial_reports_tool.runtime.retrieval import (
+from agents.financial_agent.contracts import ReportCandidate
+from agents.financial_agent.retrieval import (
     assemble_contexts,
     build_retrieval_queries,
     detect_focus,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.financial_reports_tool.schemas import FinancialReportsContext, FinancialReportsHit, FinancialReportsToolResponse
+from agents.financial_agent.contracts import FinancialReportsContext, FinancialReportsHit, FinancialReportsToolResponse
 from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
 from stock_etl.orchestration.reports_adapter import FinancialReportsToolAdapter
 from stock_etl.orchestration.trace import TraceCollector
