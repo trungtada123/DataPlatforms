@@ -20,6 +20,7 @@ RUN mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}" \
 
 COPY backend /app/backend
 COPY src /app/src
+COPY scripts /app/scripts
 
 EXPOSE 8000
 
