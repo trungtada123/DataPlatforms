@@ -117,6 +117,18 @@ Recommended future canonical PYTHONPATH:
 - `agents._legacy` deletion readiness: **NOT READY**
   - Functionally unused in-repo, but held for staged compatibility policy and final cutover sequencing.
 
+## Wave 7B.5 Runtime Endpoint Alignment
+- Canonical route wiring on current `test1` confirms `/health`, `/ready`, `/metrics`, `/query` are registered in backend app (`main:app` + `api/health.py` + `api/query.py`).
+- Mixed smoke results after Wave 7B were diagnosed as environment/runtime alignment issues, not route-removal regression:
+  - Active listener on `localhost:8000` was a local `python -m uvicorn main:app` process, not Docker compose backend container.
+  - `/ready` degraded due DB hostname `postgres` not resolvable outside compose network.
+  - Query failures were dominated by dependency constraints (Gemini 429 quota and DB host resolution), not import wiring regression.
+  - `/metrics` `404` on that local process indicates stale/non-matching runtime process state for smoke execution context.
+- Operational guidance:
+  - Use compose backend on `http://localhost:8000` for full-stack smoke.
+  - Use dev compose API on `http://localhost:8001` when validating `docker-compose.dev.yml`.
+  - Rebuild/restart backend after migration waves before smoke assertions.
+
 ## Recommended Cleanup Waves
 1. `Wave 7C`: tests compatibility split/update
 2. `Wave 7D`: docs/PYTHONPATH cleanup

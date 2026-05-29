@@ -120,6 +120,15 @@ curl -s http://localhost:8000/ready
 curl -s http://localhost:8000/metrics
 ```
 
+Important runtime note:
+- `/metrics` is exposed by the canonical backend API in `backend/src/api/health.py`.
+- If `/health` is `200` but `/metrics` is `404`, you are likely hitting a stale/non-compose local Uvicorn process on `:8000`.
+- Verify active process and restart backend from compose when needed:
+```bash
+docker compose up -d backend
+docker compose logs backend --tail=100
+```
+
 Manual query:
 ```bash
 curl -s -X POST http://localhost:8000/query -H "Content-Type: application/json" -d "{\"question\":\"Tin tức mới nhất về cổ phiếu VNM là gì?\",\"debug\":true}"
@@ -130,6 +139,14 @@ If UI/manual query page is enabled in your runtime, use it only as a convenience
 ## 11) Smoke Handover Matrix Script
 ```bash
 python scripts/smoke_handover_check.py --base-url http://localhost:8000
+```
+
+Port selection:
+- Default compose backend (`docker-compose.yml`): `http://localhost:8000`
+- Dev compose orchestration API (`docker-compose.dev.yml`): `http://localhost:8001`
+- If testing dev compose, always override base URL:
+```bash
+python scripts/smoke_handover_check.py --base-url http://localhost:8001
 ```
 
 This script checks:
