@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ssi-postgres-dev
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./exports:/restore:ro
+
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    container_name: ssi-qdrant-dev
+    restart: unless-stopped
+    profiles: ["internal-qdrant"]
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_dev_data:/qdrant/storage
+
+  orchestration-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ssi-orchestration-api-dev
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      PYTHONPATH: /opt/airflow/src
+      STOCK_ETL_ENV_FILE: /opt/airflow/.env.docker
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      FINANCIAL_REPORTS_QDRANT_URL: ${FINANCIAL_REPORTS_QDRANT_URL}
+      FINANCIAL_REPORTS_PARSED_OUTPUT_DIR: ${FINANCIAL_REPORTS_PARSED_OUTPUT_DIR}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./:/opt/airflow
+    entrypoint: ["/bin/bash", "-lc", "uvicorn stock_etl.orchestration.orchestration_api:app --host 0.0.0.0 --port 8001"]
+    ports:
+      - "8001:8001"
+
+  adminer:
+    image: adminer:4
+    container_name: ssi-adminer-dev
+    restart: unless-stopped
+    profiles: ["admin"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "18081:8080"
+
+volumes:
+  postgres_dev_data:
+  qdrant_dev_data:

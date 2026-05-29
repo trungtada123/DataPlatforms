@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SSI Stock QA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink:       #0d1117;
+      --ink-2:     #151c26;
+      --ink-3:     #1e2738;
+      --surface:   #f9f6f0;
+      --surface-2: #f2ede3;
+      --gold:      #b8892a;
+      --gold-lt:   #d4a84b;
+      --gold-dim:  rgba(184,137,42,0.14);
+      --gold-line: rgba(184,137,42,0.3);
+      --white:     #ffffff;
+      --muted:     #6b7280;
+      --muted-2:   #8d96a4;
+      --border:    rgba(13,17,23,0.1);
+      --border-2:  rgba(13,17,23,0.06);
+      --danger:    #9b3328;
+      --success:   #1a6647;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      min-height: 100vh;
+      background: var(--surface);
+      color: var(--ink);
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ─── Noise overlay ─── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── Header ─── */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: rgba(249,246,240,0.92);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-inner {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 0 32px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      background: var(--ink);
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+    }
+    .brand-mark svg {
+      width: 18px;
+      height: 18px;
+      fill: var(--gold-lt);
+    }
+    .brand-name {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+    .brand-sep {
+      width: 1px;
+      height: 20px;
+      background: var(--border);
+    }
+    .brand-sub {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 300;
+      letter-spacing: 0.01em;
+    }
+    .header-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      padding: 5px 12px;
+      border-radius: 99px;
+      border: 1px solid var(--border);
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      background: transparent;
+    }
+    .chip.active {
+      border-color: var(--gold-line);
+      color: var(--gold);
+      background: var(--gold-dim);
+    }
+
+    /* ─── Main layout ─── */
+    .page {
+      position: relative;
+      z-index: 1;
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 56px 32px 80px;
+      display: grid;
+      gap: 64px;
+    }
+
+    /* ─── Hero ─── */
+    .hero {
+      display: grid;
+      gap: 20px;
+      max-width: 720px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+    .eyebrow-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--gold-lt);
+    }
+    .hero h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(2.2rem, 4.5vw, 3.4rem);
+      font-weight: 600;
+      line-height: 1.08;
+      letter-spacing: -0.04em;
+      color: var(--ink);
+    }
+    .hero h1 em {
+      font-style: italic;
+      color: var(--gold);
+    }
+    .hero-desc {
+      font-size: 1.02rem;
+      color: var(--muted);
+      font-weight: 300;
+      max-width: 56ch;
+      line-height: 1.72;
+    }
+
+    /* ─── Ask section ─── */
+    .ask-section {
+      display: grid;
+      gap: 28px;
+    }
+    .section-label {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .section-label-text {
+      font-size: 0.78rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .section-line {
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .ask-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 2px 20px rgba(13,17,23,0.05), 0 1px 3px rgba(13,17,23,0.04);
+      transition: box-shadow 0.3s ease;
+    }
+    .ask-card:focus-within {
+      box-shadow: 0 4px 32px rgba(13,17,23,0.09), 0 0 0 3px var(--gold-dim);
+    }
+    .ask-card-top {
+      padding: 24px 28px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .ask-card-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .ask-meta {
+      font-size: 0.8rem;
+      color: var(--muted-2);
+    }
+    .ask-meta code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.78rem;
+      background: var(--surface-2);
+      padding: 1px 6px;
+      border-radius: 5px;
+      color: var(--ink);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      resize: vertical;
+      border: none;
+      border-top: 1px solid var(--border-2);
+      border-radius: 0;
+      padding: 20px 28px;
+      background: transparent;
+      color: var(--ink);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1.02rem;
+      font-weight: 400;
+      line-height: 1.7;
+      outline: none;
+      margin-top: 16px;
+    }
+    textarea::placeholder { color: var(--muted-2); }
+
+    .ask-footer {
+      padding: 16px 28px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--border-2);
+    }
+    .ask-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+    .btn-primary {
+      background: var(--ink);
+      color: var(--gold-lt);
+      padding: 10px 24px;
+      border-radius: 99px;
+      font-size: 0.9rem;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-primary:hover { background: var(--ink-2); transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.5; transform: none; cursor: wait; }
+    .btn-primary svg { width: 15px; height: 15px; fill: currentColor; transition: transform 0.2s; }
+    .btn-primary:not(:disabled):hover svg { transform: translateX(2px); }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      padding: 10px 16px;
+      border-radius: 99px;
+      font-size: 0.88rem;
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover { color: var(--ink); border-color: rgba(13,17,23,0.2); }
+
+    .ask-shortcut {
+      font-size: 0.78rem;
+      color: var(--muted-2);
+    }
+    .kbd {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.72rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--ink);
+    }
+
+    /* ─── Example buttons ─── */
+    .examples-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+    .example-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+    }
+    .example-btn {
+      text-align: left;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 18px;
+      font-size: 0.88rem;
+      color: var(--ink);
+      line-height: 1.55;
+      transition: all 0.2s;
+    }
+    .example-btn:hover {
+      border-color: var(--gold-line);
+      background: var(--gold-dim);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px rgba(13,17,23,0.06);
+    }
+    .example-tag {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    /* ─── Status ─── */
+    .status {
+      display: none;
+      padding: 12px 18px;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      font-weight: 400;
+      line-height: 1.5;
+    }
+    .status.info {
+      display: block;
+      color: var(--success);
+      background: rgba(26,102,71,0.07);
+      border: 1px solid rgba(26,102,71,0.15);
+    }
+    .status.error {
+      display: block;
+      color: var(--danger);
+      background: rgba(155,51,40,0.07);
+      border: 1px solid rgba(155,51,40,0.15);
+    }
+
+    /* ─── Results ─── */
+    .results-section {
+      display: grid;
+      gap: 28px;
+      animation: fadeUp 0.4s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-row {
+      display: grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap: 16px;
+    }
+
+    .result-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px 28px;
+      box-shadow: 0 1px 8px rgba(13,17,23,0.04);
+    }
+    .result-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border-2);
+    }
+    .result-card-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 0.98rem;
+      font-weight: 600;
+      color: var(--ink);
+    }
+    .result-tag {
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gold);
+      background: var(--gold-dim);
+      padding: 4px 10px;
+      border-radius: 99px;
+      border: 1px solid var(--gold-line);
+    }
+
+    .answer-box {
+      font-size: 0.97rem;
+      line-height: 1.78;
+      color: var(--ink);
+      white-space: pre-wrap;
+    }
+    .answer-box.empty { color: var(--muted-2); font-style: italic; }
+
+    /* ─── Meta box ─── */
+    .meta-list {
+      display: grid;
+      gap: 12px;
+    }
+    .meta-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2px;
+    }
+    .meta-key {
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted-2);
+    }
+    .meta-val {
+      font-size: 0.9rem;
+      color: var(--ink);
+      line-height: 1.55;
+    }
+    .meta-val.mono {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.84rem;
+    }
+    .meta-divider {
+      height: 1px;
+      background: var(--border-2);
+    }
+
+    /* ─── SQL panel ─── */
+    .sql-card {
+      background: var(--ink);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(13,17,23,0.18);
+    }
+    .sql-header {
+      padding: 14px 24px;
+      background: rgba(255,255,255,0.04);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sql-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+    }
+    .sql-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .sql-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .sql-dot:nth-child(1) { background: #ff6058; }
+    .sql-dot:nth-child(2) { background: #ffbd2e; }
+    .sql-dot:nth-child(3) { background: #28c840; }
+    .sql-tag-right {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.35);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    pre.sql-box {
+      margin: 0;
+      padding: 24px 28px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.88rem;
+      line-height: 1.72;
+      color: #a8d8b5;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ─── Table ─── */
+    .table-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 1px 8px rgba(13,17,23,0.04);
+    }
+    .table-card-head {
+      padding: 18px 28px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .table-wrap {
+      overflow-x: auto;
+      max-height: 440px;
+      overflow-y: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface-2);
+      padding: 11px 20px;
+      text-align: left;
+      font-size: 0.7rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody td {
+      padding: 11px 20px;
+      color: var(--ink);
+      border-bottom: 1px solid var(--border-2);
+      vertical-align: top;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.84rem;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: var(--surface); }
+    .table-empty {
+      padding: 32px 28px;
+      color: var(--muted-2);
+      font-style: italic;
+      font-size: 0.9rem;
+    }
+
+    /* ─── Footer ─── */
+    .footer-note {
+      padding: 28px 0 0;
+      border-top: 1px solid var(--border);
+      font-size: 0.84rem;
+      color: var(--muted-2);
+      line-height: 1.7;
+      max-width: 80ch;
+    }
+    .footer-note strong {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 860px) {
+      .page { padding: 36px 20px 60px; gap: 48px; }
+      .header-inner { padding: 0 20px; }
+      .result-row { grid-template-columns: 1fr; }
+      .ask-card-top { padding: 20px 20px 0; }
+      textarea { padding: 16px 20px; }
+      .ask-footer { padding: 14px 20px 18px; }
+      .result-card { padding: 20px 20px; }
+      .sql-box { padding: 20px 20px; }
+      .header-chips { display: none; }
+    }
+    @media (max-width: 540px) {
+      .example-grid { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 2rem; }
+    }
+
+    /* ─── Spinner ─── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(212,168,75,0.3);
+      border-top-color: var(--gold-lt);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 20 20"><path d="M3 15l4-8 3 5 2-3 5 6H3z"/></svg>
+        </div>
+        <span class="brand-name">SSI Stock QA</span>
+        <div class="brand-sep"></div>
+        <span class="brand-sub">Trợ lý hỏi đáp dữ liệu chứng khoán</span>
+      </div>
+      <div class="header-chips">
+        <span class="chip active">Gemini</span>
+        <span class="chip active">PostgreSQL</span>
+        <span class="chip">Airflow</span>
+        <span class="chip">50 mã · Từ 2022</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="page">
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="eyebrow">
+        <div class="eyebrow-dot"></div>
+        Phân tích thị trường thực thời
+      </div>
+      <h1>Hỏi dữ liệu thị trường<br>như đang nói chuyện với<br><em>chuyên gia phân tích</em></h1>
+      <p class="hero-desc">
+        Nhập câu hỏi bằng tiếng Việt — hệ thống tự sinh SQL, truy vấn PostgreSQL và trả về
+        câu trả lời tóm tắt cùng bảng dữ liệu gốc để đối chiếu. Rõ logic, sạch dữ liệu,
+        đủ đẹp để đưa vào slide báo cáo.
+      </p>
+    </section>
+
+    <!-- Ask -->
+    <section class="ask-section">
+      <div class="section-label">
+        <span class="section-label-text">Đặt câu hỏi</span>
+        <div class="section-line"></div>
+      </div>
+
+      <div class="ask-card">
+        <div class="ask-card-top">
+          <h2 class="ask-card-title">Nhập câu hỏi của bạn</h2>
+          <div class="ask-meta">Nguồn dữ liệu: <code>vw_daily_stock_llm</code> &amp; <code>vw_intraday_latest_llm</code></div>
+        </div>
+
+        <textarea id="questionInput" placeholder="Ví dụ: So sánh giá của TCB ngày 13/01/2026 với 14/04/2026 xem biến động thế nào…"></textarea>
+
+        <div class="ask-footer">
+          <div class="ask-actions">
+            <button class="btn-primary" id="askButton">
+              <span>Gửi câu hỏi</span>
+              <svg viewBox="0 0 20 20"><path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="btn-ghost" id="clearButton" type="button">Làm trống</button>
+          </div>
+          <span class="ask-shortcut">Phím tắt: <span class="kbd">Ctrl</span> + <span class="kbd">Enter</span></span>
+        </div>
+      </div>
+
+      <div id="statusBox" class="status"></div>
+
+      <!-- Examples -->
+      <div>
+        <p class="examples-label" style="margin-bottom:12px;">Gợi ý câu hỏi phổ biến</p>
+        <div class="example-grid">
+          <button class="example-btn" type="button" data-question="Giá của HPG đã tăng bao nhiêu % từ đầu tháng 4/2026 đến hiện tại?">
+            <span class="example-tag">Biến động theo kỳ</span>
+            Giá của HPG đã tăng bao nhiêu % từ đầu tháng 4/2026 đến hiện tại?
+          </button>
+          <button class="example-btn" type="button" data-question="So sánh giá của TCB ngày 13/01/2026 với 14/04/2026 xem biến động thế nào">
+            <span class="example-tag">So sánh hai mốc ngày</span>
+            So sánh giá của TCB ngày 13/01/2026 với 14/04/2026 xem biến động thế nào
+          </button>
+          <button class="example-btn" type="button" data-question="Trong nhóm ngân hàng ACB, BID, CTG, HDB, MBB, SHB, SSB, STB, TCB, TPB, VCB, VIB, VPB, mã nào có RSI_14 cao nhất ở phiên mới nhất?">
+            <span class="example-tag">Top theo chỉ báo</span>
+            Trong nhóm ngân hàng, mã nào có RSI_14 cao nhất ở phiên mới nhất?
+          </button>
+          <button class="example-btn" type="button" data-question="Mã nào trong danh sách theo dõi đang nằm trên MA50 và có khối ngoại mua ròng dương ở phiên mới nhất?">
+            <span class="example-tag">Lọc theo điều kiện</span>
+            Mã nào đang nằm trên MA50 và có khối ngoại mua ròng dương phiên mới nhất?
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Results -->
+    <section class="results-section" id="resultsSection" style="display:none;">
+
+      <div class="section-label">
+        <span class="section-label-text">Kết quả phân tích</span>
+        <div class="section-line"></div>
+      </div>
+
+      <!-- Answer + Meta -->
+      <div class="result-row">
+        <div class="result-card">
+          <div class="result-card-head">
+            <span class="result-card-title">Câu trả lời</span>
+            <span class="result-tag">Tóm tắt cho người đọc</span>
+          </div>
+          <div id="answerBox" class="answer-box empty">Chưa có câu trả lời.</div>
+        </div>
+
+        <div class="result-card">
+          <div class="result-card-head">
+            <span class="result-card-title">Thông tin nhanh</span>
+            <span class="result-tag">Metadata</span>
+          </div>
+          <div id="metaBox">
+            <div class="meta-list">
+              <div class="meta-row">
+                <span class="meta-key">Số dòng kết quả</span>
+                <span class="meta-val mono" id="metaRows">—</span>
+              </div>
+              <div class="meta-divider"></div>
+              <div class="meta-row">
+                <span class="meta-key">Giải thích</span>
+                <span class="meta-val" id="metaReasoning" style="color:var(--muted-2); font-style:italic;">—</span>
+              </div>
+              <div class="meta-divider"></div>
+              <div class="meta-row">
+                <span class="meta-key">Câu hỏi đã gửi</span>
+                <span class="meta-val" id="metaQuestion" style="color:var(--muted);">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SQL -->
+      <div class="sql-card">
+        <div class="sql-header">
+          <div class="sql-dots">
+            <div class="sql-dot"></div>
+            <div class="sql-dot"></div>
+            <div class="sql-dot"></div>
+          </div>
+          <span class="sql-title">SQL được sinh ra</span>
+          <span class="sql-tag-right">Đối chiếu logic</span>
+        </div>
+        <pre id="sqlBox" class="sql-box">-- SQL sẽ xuất hiện tại đây</pre>
+      </div>
+
+      <!-- Table -->
+      <div class="table-card">
+        <div class="table-card-head">
+          <span class="result-card-title">Bảng kết quả</span>
+          <span class="result-tag">Dữ liệu gốc</span>
+        </div>
+        <div class="table-wrap">
+          <div id="tableContainer">
+            <div class="table-empty">Chưa có dòng dữ liệu nào được hiển thị.</div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Footer -->
+    <div class="footer-note">
+      <strong>Mẹo chụp slide:</strong> Sau khi có kết quả, chụp phần "Câu trả lời", "SQL được sinh ra"
+      và "Bảng kết quả" cùng lúc để slide vừa rõ logic vừa rõ dữ liệu. Dữ liệu nền gồm 50 mã cổ phiếu,
+      lịch sử từ 2022 và snapshot trong phiên được cập nhật định kỳ từ SSI.
+    </div>
+
+  </div>
+
+  <script>
+    const questionInput = document.getElementById('questionInput');
+    const askButton     = document.getElementById('askButton');
+    const clearButton   = document.getElementById('clearButton');
+    const statusBox     = document.getElementById('statusBox');
+    const answerBox     = document.getElementById('answerBox');
+    const metaRows      = document.getElementById('metaRows');
+    const metaReasoning = document.getElementById('metaReasoning');
+    const metaQuestion  = document.getElementById('metaQuestion');
+    const sqlBox        = document.getElementById('sqlBox');
+    const tableContainer= document.getElementById('tableContainer');
+    const resultsSection= document.getElementById('resultsSection');
+
+    function setStatus(type, msg) {
+      statusBox.className = 'status';
+      if (!msg) { statusBox.textContent = ''; return; }
+      statusBox.classList.add(type);
+      statusBox.textContent = msg;
+    }
+
+    function esc(v) {
+      return String(v)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+    }
+
+    function renderTable(rows) {
+      if (!rows || rows.length === 0) {
+        tableContainer.innerHTML = '<div class="table-empty">Không có dòng dữ liệu nào phù hợp.</div>';
+        return;
+      }
+      const cols = [...new Set(rows.flatMap(r => Object.keys(r)))];
+      const head = cols.map(c => `<th>${esc(c)}</th>`).join('');
+      const body = rows.map(r => {
+        const cells = cols.map(c => {
+          const v = r[c] == null ? '' : r[c];
+          return `<td>${esc(v)}</td>`;
+        }).join('');
+        return `<tr>${cells}</tr>`;
+      }).join('');
+      tableContainer.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+
+    function setLoading(on) {
+      if (on) {
+        askButton.disabled = true;
+        askButton.innerHTML = '<span class="spinner"></span><span>Đang xử lý…</span>';
+      } else {
+        askButton.disabled = false;
+        askButton.innerHTML = '<span>Gửi câu hỏi</span><svg viewBox="0 0 20 20"><path d="M4 10h12M11 5l5 5-5 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      }
+    }
+
+    async function submitQuestion() {
+      const question = questionInput.value.trim();
+      if (question.length < 3) {
+        setStatus('error', 'Hãy nhập câu hỏi dài hơn để hệ thống có đủ ngữ cảnh.');
+        return;
+      }
+
+      setLoading(true);
+      setStatus('info', 'Đang truy vấn dữ liệu và sinh SQL…');
+      resultsSection.style.display = 'none';
+
+      try {
+        const res = await fetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail, null, 2);
+          throw new Error(detail || 'Có lỗi xảy ra khi gọi API.');
+        }
+
+        // Populate results
+        answerBox.className = 'answer-box';
+        answerBox.textContent = data.answer || 'Không có câu trả lời tổng hợp.';
+
+        metaRows.textContent      = data.row_count ?? '—';
+        metaReasoning.textContent = data.reasoning || 'Không có';
+        metaReasoning.style.fontStyle = data.reasoning ? 'normal' : 'italic';
+        metaReasoning.style.color     = data.reasoning ? 'var(--ink)' : 'var(--muted-2)';
+        metaQuestion.textContent  = data.question || question;
+
+        sqlBox.textContent = data.sql || '-- Không có SQL';
+        renderTable(data.rows || []);
+
+        resultsSection.style.display = 'grid';
+        resultsSection.style.animation = 'none';
+        resultsSection.offsetHeight;
+        resultsSection.style.animation = '';
+
+        setStatus('info', 'Đã xử lý xong — bạn có thể chụp màn hình để đưa vào báo cáo.');
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      } catch (err) {
+        setStatus('error', err.message || 'Đã xảy ra lỗi không xác định.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    askButton.addEventListener('click', submitQuestion);
+
+    clearButton.addEventListener('click', () => {
+      questionInput.value = '';
+      setStatus('', '');
+      resultsSection.style.display = 'none';
+      questionInput.focus();
+    });
+
+    questionInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        submitQuestion();
+      }
+    });
+
+    document.querySelectorAll('[data-question]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        questionInput.value = btn.dataset.question;
+        questionInput.focus();
+      });
+    });
+  </script>
+</body>
+</html>
