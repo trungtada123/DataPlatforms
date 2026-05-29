@@ -127,3 +127,22 @@ Remaining limitations:
     4) optional news-domain crawl smoke (`https://vnexpress.net`)
 - Remaining limitations:
   - Live crawl still depends on external site/network behavior. If news domains block crawling, status should be `SITE_BLOCKED`/`NETWORK_BLOCKED` instead of browser-launch crash.
+
+## News Query Normalization Fix
+- Root cause:
+  - Planner/orchestration metadata can provide `tool_queries.news` as a structured payload (dict or dict-like string), for example:
+    - `"{'query': 'FPT negative news', 'time_period': 'recent'}"`
+  - Before this fix, news execution path could forward that raw dict-string directly into search, causing malformed query text and low/zero search hits.
+- Applied fix:
+  - Added safe normalization helper in `backend/src/agents/news_agent/qa.py`:
+    - `normalize_news_tool_query(value, original_query=None) -> str`
+  - Parsing strategy:
+    - `json.loads` first for JSON string payloads
+    - `ast.literal_eval` fallback for single-quote dict-like strings
+    - never uses `eval`
+  - Backend tool node now resolves News query from `metadata.intent_plan.tool_queries["news"]` and normalizes it before calling News Agent.
+  - Search candidate builder now enriches Vietnamese intent-aware candidates for negative/recent stock-news queries (e.g., `FPT tin tiêu cực gần đây`, `FPT rủi ro cổ phiếu`, `FPT bị phạt`, `FPT khó khăn`, `FPT tin tức mới nhất`).
+- Expected behavior after fix:
+  - `query_used` is plain clean text (not raw dict-string).
+  - News-only negative query remains routed as `tools_used=["news"]`.
+  - Search has better chance to return results for Vietnamese negative-news intent even when planner started from English-style structured payload.

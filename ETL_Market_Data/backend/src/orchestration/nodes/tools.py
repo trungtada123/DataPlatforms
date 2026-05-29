@@ -7,7 +7,7 @@ from typing import Any, Callable
 
 from agents.financial_agent.qa import answer as financial_answer
 from agents.market_agent.qa import answer as market_answer
-from agents.news_agent.qa import answer as news_answer
+from agents.news_agent.qa import answer as news_answer, normalize_news_tool_query
 from schemas.orchestration import AgentResult
 from utils.metrics import record_agent_call
 
@@ -33,6 +33,7 @@ def run_news_agent(state: OrchestrationState) -> dict[str, Any]:
         tool_name="news",
         state_key="news_result",
         runner=news_answer,
+        query_resolver=_resolve_news_query,
     )
 
 
@@ -53,8 +54,12 @@ def _run_agent_node(
     tool_name: str,
     state_key: str,
     runner: Callable[[str], AgentResult],
+    query_resolver: Callable[[OrchestrationState], str] | None = None,
 ) -> dict[str, Any]:
-    query = str(state.get("query", "") or "").strip()
+    if query_resolver is None:
+        query = str(state.get("query", "") or "").strip()
+    else:
+        query = str(query_resolver(state) or "").strip()
     trace = list(state.get("trace", []))
     errors = list(state.get("errors", []))
     metadata = dict(state.get("metadata", {}))
@@ -149,3 +154,36 @@ def _run_agent_node(
             "errors": errors,
             "metadata": metadata,
         }
+
+
+def _resolve_news_query(state: OrchestrationState) -> str:
+    original_query = str(state.get("query", "") or "").strip()
+    metadata = state.get("metadata")
+    if not isinstance(metadata, dict):
+        return normalize_news_tool_query(original_query, original_query=original_query)
+
+    intent_plan = metadata.get("intent_plan")
+    if not isinstance(intent_plan, dict):
+        return normalize_news_tool_query(original_query, original_query=original_query)
+
+    tool_queries = intent_plan.get("tool_queries")
+    if not isinstance(tool_queries, dict):
+        return normalize_news_tool_query(original_query, original_query=original_query)
+
+    planned_query = None
+    for key, value in tool_queries.items():
+        normalized_key = str(key).strip().lower()
+        if normalized_key == "news":
+            planned_query = value
+            break
+        if normalized_key.endswith(".news") or normalized_key.endswith("_news"):
+            planned_query = value
+            break
+        if "news" in normalized_key:
+            planned_query = value
+            break
+
+    if planned_query is None:
+        planned_query = tool_queries.get("news")
+
+    return normalize_news_tool_query(planned_query, original_query=original_query)

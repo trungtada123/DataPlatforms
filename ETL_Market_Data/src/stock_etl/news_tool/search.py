@@ -223,9 +223,48 @@ class DuckDuckGoNewsSearch:
     @staticmethod
     def _build_query_candidates(question: str) -> list[str]:
         raw_question = " ".join(question.strip().split())
+        normalized_question = normalize_free_text(raw_question)
         candidates: list[str] = []
         entity = DuckDuckGoNewsSearch._extract_entity_phrase(raw_question)
         tickers = DuckDuckGoNewsSearch._extract_ticker_tokens(entity or raw_question)
+        primary_subject = (entity or (tickers[0] if tickers else "")).strip()
+        has_negative_intent = any(
+            token in normalized_question
+            for token in (
+                "negative",
+                "tieu cuc",
+                "xau",
+                "rui ro",
+                "giam",
+                "lo",
+                "kien",
+                "bi phat",
+                "canh bao",
+                "kho khan",
+                "sa thai",
+                "no",
+                "tranh chap",
+            )
+        )
+        has_recent_intent = any(
+            token in normalized_question
+            for token in ("gan day", "moi nhat", "hom nay", "tuan nay", "recent", "latest", "today", "this week")
+        )
+        is_stock_or_company_query = bool(tickers) or any(
+            token in normalized_question
+            for token in (
+                "co phieu",
+                "chung khoan",
+                "doanh nghiep",
+                "cong ty",
+                "tai chinh",
+                "ket qua kinh doanh",
+                "stock",
+                "shares",
+                "business",
+                "company",
+            )
+        )
 
         if entity:
             candidates.append(entity)
@@ -240,6 +279,23 @@ class DuckDuckGoNewsSearch:
             candidates.append(ticker)
             candidates.append(f"tin tức {ticker}")
             candidates.append(f"{ticker} chứng khoán")
+            candidates.append(f"{ticker} tin tức mới nhất")
+
+        if is_stock_or_company_query and primary_subject:
+            candidates.append(f"{primary_subject} kết quả kinh doanh")
+            candidates.append(f"{primary_subject} doanh nghiệp")
+
+        if has_recent_intent and primary_subject:
+            candidates.append(f"{primary_subject} tin tức gần đây")
+            candidates.append(f"{primary_subject} tin tức mới nhất")
+
+        if has_negative_intent and primary_subject:
+            candidates.append(f"{primary_subject} tin tiêu cực gần đây")
+            candidates.append(f"{primary_subject} rủi ro cổ phiếu")
+            candidates.append(f"{primary_subject} bị phạt")
+            candidates.append(f"{primary_subject} khó khăn")
+            candidates.append(f"{primary_subject} tin tức mới nhất")
+            candidates.append(f"{primary_subject} tin tiêu cực gần đây OR rủi ro OR bị phạt OR khó khăn")
 
         candidates.append(raw_question)
 
