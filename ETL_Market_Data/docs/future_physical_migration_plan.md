@@ -295,3 +295,9 @@ It is planning-only and does not authorize implementation in the current phase.
 ## Explicit Out-of-Scope Statement
 - Removing `src/stock_etl` is **not** part of the current internal handover package.
 - Any physical migration/cutover requires a dedicated approved phase.
+
+## Financial Teammate Work Policy
+- Backend financial work introduced by teammate (including commit lineage ending at `f5f738a`) is protected as canonical candidate.
+- Do not overwrite `backend/src/agents/financial_agent/*`, `backend/src/ingestion/financial_reports/*`, or `backend/src/core/vector_store.py` with legacy `src/stock_etl/financial_reports_tool/*` code.
+- Financial cleanup must proceed via shim inversion and reconciliation-first strategy (`src/stock_etl` compatibility layer -> backend canonical modules).
+- Deep Financial ETL hardening (OCR quality tuning, Qdrant write/retrieval scaling, full production validation) remains postponed to a separate dedicated wave.
