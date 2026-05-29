@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.orchestration.context_merger import ContextMerger
-from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
+from orchestration.context_merger import ContextMerger
+from orchestration.contracts import IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
 
 
 class ContextMergerTests(TestCase):

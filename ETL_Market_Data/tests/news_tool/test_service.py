@@ -7,10 +7,10 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.news_tool.config import NewsToolSettings
-from stock_etl.news_tool.schemas import NewsCrawledArticle, NewsSearchHit
-from stock_etl.news_tool.service import NewsToolService
-from stock_etl.news_tool.storage import LocalArtifactStorage
+from agents.news_agent.config import NewsToolSettings
+from agents.news_agent.schemas import NewsCrawledArticle, NewsSearchHit
+from agents.news_agent.service import NewsToolService
+from agents.news_agent.storage import LocalArtifactStorage
 
 
 class FakeSearchClient:
@@ -242,21 +242,21 @@ class NewsToolServiceTests(TestCase):
                 summarizer=FakeSummarizer(),
             )
 
-            with patch("stock_etl.news_tool.service.ensure_news_schema"), patch(
-                "stock_etl.news_tool.service.create_news_query",
+            with patch("agents.news_agent.service.ensure_news_schema"), patch(
+                "agents.news_agent.service.create_news_query",
                 return_value="query-1",
             ), patch(
-                "stock_etl.news_tool.service.create_news_run",
+                "agents.news_agent.service.create_news_run",
                 return_value="run-1",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article",
+                "agents.news_agent.service.upsert_news_article",
                 return_value="article-1",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article_content"
+                "agents.news_agent.service.upsert_news_article_content"
             ), patch(
-                "stock_etl.news_tool.service.update_news_article_summary"
+                "agents.news_agent.service.update_news_article_summary"
             ), patch(
-                "stock_etl.news_tool.service.finalize_news_run"
+                "agents.news_agent.service.finalize_news_run"
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?", trace_id="trace-1", debug=True)
 
@@ -305,21 +305,21 @@ class NewsToolServiceTests(TestCase):
                 summarizer=FakeFilteringSummarizer(),
             )
 
-            with patch("stock_etl.news_tool.service.ensure_news_schema"), patch(
-                "stock_etl.news_tool.service.create_news_query",
+            with patch("agents.news_agent.service.ensure_news_schema"), patch(
+                "agents.news_agent.service.create_news_query",
                 return_value="query-2",
             ), patch(
-                "stock_etl.news_tool.service.create_news_run",
+                "agents.news_agent.service.create_news_run",
                 return_value="run-2",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article",
+                "agents.news_agent.service.upsert_news_article",
                 side_effect=["article-1", "article-2"],
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article_content"
+                "agents.news_agent.service.upsert_news_article_content"
             ), patch(
-                "stock_etl.news_tool.service.update_news_article_summary"
+                "agents.news_agent.service.update_news_article_summary"
             ), patch(
-                "stock_etl.news_tool.service.finalize_news_run"
+                "agents.news_agent.service.finalize_news_run"
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?")
 
@@ -366,21 +366,21 @@ class NewsToolServiceTests(TestCase):
                 summarizer=FakeNoRelevantSummarizer(),
             )
 
-            with patch("stock_etl.news_tool.service.ensure_news_schema"), patch(
-                "stock_etl.news_tool.service.create_news_query",
+            with patch("agents.news_agent.service.ensure_news_schema"), patch(
+                "agents.news_agent.service.create_news_query",
                 return_value="query-3",
             ), patch(
-                "stock_etl.news_tool.service.create_news_run",
+                "agents.news_agent.service.create_news_run",
                 return_value="run-3",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article",
+                "agents.news_agent.service.upsert_news_article",
                 side_effect=["article-1", "article-2"],
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article_content"
+                "agents.news_agent.service.upsert_news_article_content"
             ), patch(
-                "stock_etl.news_tool.service.update_news_article_summary"
+                "agents.news_agent.service.update_news_article_summary"
             ), patch(
-                "stock_etl.news_tool.service.finalize_news_run"
+                "agents.news_agent.service.finalize_news_run"
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?")
 
@@ -426,21 +426,21 @@ class NewsToolServiceTests(TestCase):
                 summarizer=FakeSummarizer(),
             )
 
-            with patch("stock_etl.news_tool.service.ensure_news_schema"), patch(
-                "stock_etl.news_tool.service.create_news_query",
+            with patch("agents.news_agent.service.ensure_news_schema"), patch(
+                "agents.news_agent.service.create_news_query",
                 return_value="query-4",
             ), patch(
-                "stock_etl.news_tool.service.create_news_run",
+                "agents.news_agent.service.create_news_run",
                 return_value="run-4",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article",
+                "agents.news_agent.service.upsert_news_article",
                 return_value="article-1",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article_content"
+                "agents.news_agent.service.upsert_news_article_content"
             ), patch(
-                "stock_etl.news_tool.service.update_news_article_summary"
+                "agents.news_agent.service.update_news_article_summary"
             ), patch(
-                "stock_etl.news_tool.service.finalize_news_run"
+                "agents.news_agent.service.finalize_news_run"
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?")
 

@@ -366,3 +366,27 @@ It is planning-only and does not authorize implementation in the current phase.
   - Wave 7D: docs + PYTHONPATH cleanup
   - Wave 8: remove `agents._legacy` if confirmed unused
   - Wave 9: remove `src/stock_etl` only after zero blockers across runtime/tests/scripts/DAGs
+
+## Wave 7C Status Update (Compatibility Tests Split/Cleanup)
+- Wave 7C completed as tests/docs-only cleanup; runtime/business logic remains unchanged.
+- Canonical test policy is now explicit:
+  - Normal behavior tests import canonical backend modules (`backend/src` paths).
+  - Legacy `stock_etl.*` imports are limited to compatibility-focused tests.
+- Major test groups converted to canonical imports:
+  - `tests/news_tool/*` -> `agents.news_agent.*`
+  - `tests/orchestration/*` -> `orchestration.*` / `agents.news_agent.schemas`
+  - root helper tests for market/core:
+    - `tests/test_stock_etl_transformers.py` -> `ingestion.market_data.transformer`
+    - `tests/test_nl2sql_local_answer.py` -> `agents.market_agent.nl2sql`
+    - `tests/test_gemini_pool.py` + `tests/test_groq_pool.py` -> `core.llm_pool`
+- Explicit compatibility suite retained/added:
+  - `tests/compat/test_legacy_stock_etl_imports.py`
+  - existing compatibility-focused files:
+    - `tests/agents/market_agent/test_canonical_migration.py`
+    - `tests/agents/market_agent/test_ingestion_canonical_migration.py`
+    - `tests/core/test_shared_core_canonical_migration.py`
+    - `tests/financial_reports_tool/test_imports.py`
+- Result:
+  - legacy imports in tests reduced significantly
+  - compatibility coverage for shim paths remains in place
+  - `src/stock_etl` is still intentionally retained until final removal wave

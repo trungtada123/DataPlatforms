@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import TestCase
 
-from stock_etl.news_tool.config import NewsToolSettings
-from stock_etl.news_tool.crawler import Crawl4aiNewsCrawler
+from agents.news_agent.config import NewsToolSettings
+from agents.news_agent.crawler import Crawl4aiNewsCrawler
 
 
 class Crawl4aiNewsCrawlerTests(TestCase):

@@ -7,9 +7,9 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.orchestration.fallback_rules import build_rule_based_intent_plan
-from stock_etl.orchestration.contracts import ToolName
-from stock_etl.orchestration.intent_classifier import IntentClassifier
+from orchestration.fallback_rules import build_rule_based_intent_plan
+from orchestration.contracts import ToolName
+from orchestration.intent_classifier import IntentClassifier
 
 
 class IntentClassifierTests(TestCase):

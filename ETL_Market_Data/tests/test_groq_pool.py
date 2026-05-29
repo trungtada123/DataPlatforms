@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from stock_etl.groq_pool import GroqKeyPool
+from core.llm_pool import GroqKeyPool
 
 
 class GroqKeyPoolTests(TestCase):
@@ -43,7 +43,7 @@ class GroqKeyPoolTests(TestCase):
             groq_base_url="https://api.groq.com/openai/v1",
         )
 
-        with patch("stock_etl.groq_pool.requests.post", side_effect=fake_post):
+        with patch("core.llm_pool.requests.post", side_effect=fake_post):
             output = GroqKeyPool(settings).generate_text("hello")
 
         self.assertEqual(output, "ok:Bearer good-key")

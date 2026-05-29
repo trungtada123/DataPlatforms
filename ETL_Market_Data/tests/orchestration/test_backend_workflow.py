@@ -6,7 +6,7 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from orchestration.workflow import run_query
-from stock_etl.orchestration.contracts import (
+from orchestration.contracts import (
     IntentPlan,
     ToolExecutionResult,
     ToolExecutionStatus,

@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.orchestration.context_merger import MergedContext
-from stock_etl.orchestration.final_synthesizer import FinalSynthesizer
-from stock_etl.orchestration.trace import TraceCollector
+from orchestration.context_merger import MergedContext
+from orchestration.final_synthesizer import FinalSynthesizer
+from orchestration.trace import TraceCollector
 
 
 class FinalSynthesizerTests(TestCase):

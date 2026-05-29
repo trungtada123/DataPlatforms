@@ -6,9 +6,9 @@ from unittest import TestCase
 from unittest.mock import patch
 
 from agents.financial_agent.contracts import FinancialReportsContext, FinancialReportsHit, FinancialReportsToolResponse
-from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
-from stock_etl.orchestration.reports_adapter import FinancialReportsToolAdapter
-from stock_etl.orchestration.trace import TraceCollector
+from orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
+from orchestration.reports_adapter import FinancialReportsToolAdapter
+from orchestration.trace import TraceCollector
 
 
 class ReportsAdapterTests(TestCase):
@@ -67,7 +67,7 @@ class ReportsAdapterTests(TestCase):
             raw_response={"synthesis_model": "groq-test"},
         )
 
-        with patch("stock_etl.orchestration.reports_adapter.FinancialReportsQueryService") as service_cls:
+        with patch("orchestration.reports_adapter.FinancialReportsQueryService") as service_cls:
             service_cls.return_value.ask.return_value = fake_response
             result = adapter.run(request, trace_collector=TraceCollector("trace-reports"))
 

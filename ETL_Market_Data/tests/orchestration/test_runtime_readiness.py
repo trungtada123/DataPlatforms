@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.orchestration.contracts import ToolName
-from stock_etl.orchestration.runtime_readiness import (
+from orchestration.contracts import ToolName
+from orchestration.runtime_readiness import (
     READINESS_NO_DATA,
     READINESS_SERVICE_UNREACHABLE,
     ReadinessCheck,

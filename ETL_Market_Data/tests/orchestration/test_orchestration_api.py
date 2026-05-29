@@ -9,11 +9,11 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from stock_etl.orchestration.contracts import ToolExecutionResult, ToolExecutionStatus, ToolName
-from stock_etl.orchestration.final_synthesizer import FinalSynthesisResult
-from stock_etl.orchestration.intent_classifier import IntentClassifier
-from stock_etl.orchestration.orchestration_api import app
-from stock_etl.orchestration.runtime_readiness import (
+from orchestration.contracts import ToolExecutionResult, ToolExecutionStatus, ToolName
+from orchestration.final_synthesizer import FinalSynthesisResult
+from orchestration.intent_classifier import IntentClassifier
+from orchestration.orchestration_api import app
+from orchestration.runtime_readiness import (
     READINESS_SERVICE_UNREACHABLE,
     ReadinessCheck,
     ToolRuntimeReadiness,
@@ -219,27 +219,27 @@ class OrchestrationApiTests(TestCase):
 
     def _base_patches(self):  # type: ignore[no-untyped-def]
         return (
-            patch("stock_etl.orchestration.orchestration_api.ensure_schema"),
-            patch("stock_etl.orchestration.orchestration_api.ensure_news_schema"),
-            patch("stock_etl.orchestration.orchestration_api.get_engine", return_value=None),
+            patch("orchestration.orchestration_api.ensure_schema"),
+            patch("orchestration.orchestration_api.ensure_news_schema"),
+            patch("orchestration.orchestration_api.get_engine", return_value=None),
             patch(
-                "stock_etl.orchestration.orchestration_api.get_intent_classifier",
+                "orchestration.orchestration_api.get_intent_classifier",
                 return_value=self._build_classifier(),
             ),
             patch(
-                "stock_etl.orchestration.orchestration_api.get_market_adapter",
+                "orchestration.orchestration_api.get_market_adapter",
                 return_value=FakeMarketAdapter(),
             ),
             patch(
-                "stock_etl.orchestration.orchestration_api.get_news_adapter",
+                "orchestration.orchestration_api.get_news_adapter",
                 return_value=FakeNewsAdapter(),
             ),
             patch(
-                "stock_etl.orchestration.orchestration_api.get_reports_adapter",
+                "orchestration.orchestration_api.get_reports_adapter",
                 return_value=FakeReportsAdapter(),
             ),
             patch(
-                "stock_etl.orchestration.orchestration_api.build_runtime_readiness_map",
+                "orchestration.orchestration_api.build_runtime_readiness_map",
                 return_value={
                     ToolName.MARKET: self._ready_readiness(ToolName.MARKET),
                     ToolName.NEWS: self._ready_readiness(ToolName.NEWS),
@@ -249,10 +249,10 @@ class OrchestrationApiTests(TestCase):
         )
 
     def test_home_serves_orchestration_ui(self) -> None:
-        with patch("stock_etl.orchestration.orchestration_api.ensure_schema"), patch(
-            "stock_etl.orchestration.orchestration_api.ensure_news_schema"
+        with patch("orchestration.orchestration_api.ensure_schema"), patch(
+            "orchestration.orchestration_api.ensure_news_schema"
         ), patch(
-            "stock_etl.orchestration.orchestration_api.get_engine",
+            "orchestration.orchestration_api.get_engine",
             return_value=None,
         ):
             with TestClient(app) as client:
@@ -288,7 +288,7 @@ class OrchestrationApiTests(TestCase):
 
     def test_mixed_market_and_news_query_uses_synthesized_answer(self) -> None:
         with self._base_patches()[0], self._base_patches()[1], self._base_patches()[2], self._base_patches()[3], self._base_patches()[4] as market_patch, self._base_patches()[5] as news_patch, self._base_patches()[6], self._base_patches()[7], patch(
-            "stock_etl.orchestration.orchestration_api.get_final_synthesizer",
+            "orchestration.orchestration_api.get_final_synthesizer",
             return_value=FakeFinalSynthesizer(),
         ):
             with TestClient(app) as client:
@@ -319,7 +319,7 @@ class OrchestrationApiTests(TestCase):
 
     def test_mixed_market_and_reports_query_uses_synthesized_answer(self) -> None:
         with self._base_patches()[0], self._base_patches()[1], self._base_patches()[2], self._base_patches()[3], self._base_patches()[4], self._base_patches()[5], self._base_patches()[6], self._base_patches()[7], patch(
-            "stock_etl.orchestration.orchestration_api.get_final_synthesizer",
+            "orchestration.orchestration_api.get_final_synthesizer",
             return_value=FakeFinalSynthesizer(),
         ):
             with TestClient(app) as client:
@@ -339,7 +339,7 @@ class OrchestrationApiTests(TestCase):
 
     def test_mixed_news_and_reports_query_uses_synthesized_answer(self) -> None:
         with self._base_patches()[0], self._base_patches()[1], self._base_patches()[2], self._base_patches()[3], self._base_patches()[4], self._base_patches()[5], self._base_patches()[6], self._base_patches()[7], patch(
-            "stock_etl.orchestration.orchestration_api.get_final_synthesizer",
+            "orchestration.orchestration_api.get_final_synthesizer",
             return_value=FakeFinalSynthesizer(),
         ):
             with TestClient(app) as client:
@@ -359,7 +359,7 @@ class OrchestrationApiTests(TestCase):
 
     def test_three_tool_query_uses_synthesized_answer(self) -> None:
         with self._base_patches()[0], self._base_patches()[1], self._base_patches()[2], self._base_patches()[3], self._base_patches()[4], self._base_patches()[5], self._base_patches()[6], self._base_patches()[7], patch(
-            "stock_etl.orchestration.orchestration_api.get_final_synthesizer",
+            "orchestration.orchestration_api.get_final_synthesizer",
             return_value=FakeFinalSynthesizer(),
         ):
             with TestClient(app) as client:
@@ -383,7 +383,7 @@ class OrchestrationApiTests(TestCase):
 
     def test_response_shape_is_consistent_and_debug_trace_contains_merged_context_when_needed(self) -> None:
         with self._base_patches()[0], self._base_patches()[1], self._base_patches()[2], self._base_patches()[3], self._base_patches()[4], self._base_patches()[5], self._base_patches()[6], self._base_patches()[7], patch(
-            "stock_etl.orchestration.orchestration_api.get_final_synthesizer",
+            "orchestration.orchestration_api.get_final_synthesizer",
             return_value=FakeFinalSynthesizer(),
         ):
             with TestClient(app) as client:
@@ -424,7 +424,7 @@ class OrchestrationApiTests(TestCase):
         )
 
         with self._base_patches()[0], self._base_patches()[1], self._base_patches()[2], self._base_patches()[3], self._base_patches()[4], self._base_patches()[5], self._base_patches()[6], self._base_patches()[7], patch(
-            "stock_etl.orchestration.orchestration_api.build_runtime_readiness_map",
+            "orchestration.orchestration_api.build_runtime_readiness_map",
             return_value={ToolName.MARKET: blocked_market_readiness},
         ):
             with TestClient(app) as client:
@@ -453,7 +453,7 @@ class OrchestrationApiTests(TestCase):
         )
 
         with self._base_patches()[0], self._base_patches()[1], self._base_patches()[2], self._base_patches()[3], self._base_patches()[4], self._base_patches()[5], self._base_patches()[6], self._base_patches()[7], patch(
-            "stock_etl.orchestration.orchestration_api.build_runtime_readiness_map",
+            "orchestration.orchestration_api.build_runtime_readiness_map",
             return_value={ToolName.FINANCIAL_REPORTS: ready_reports_readiness},
         ):
             with TestClient(app) as client:

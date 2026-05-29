@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import TestCase
 
-from stock_etl.news_tool.config import NewsToolSettings
-from stock_etl.news_tool.schemas import NewsSearchHit
-from stock_etl.news_tool.search import DuckDuckGoNewsSearch
+from agents.news_agent.config import NewsToolSettings
+from agents.news_agent.schemas import NewsSearchHit
+from agents.news_agent.search import DuckDuckGoNewsSearch
 
 
 class DuckDuckGoNewsSearchTests(TestCase):

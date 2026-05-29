@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.gemini_pool import GeminiKeyPool
+from core.llm_pool import GeminiKeyPool
 
 
 class GeminiKeyPoolTests(TestCase):
@@ -36,8 +36,8 @@ class GeminiKeyPoolTests(TestCase):
             gemini_retry_delay_seconds=0.0,
         )
 
-        with patch("stock_etl.gemini_pool.genai.configure", side_effect=fake_configure), patch(
-            "stock_etl.gemini_pool.genai.GenerativeModel",
+        with patch("core.llm_pool.genai.configure", side_effect=fake_configure), patch(
+            "core.llm_pool.genai.GenerativeModel",
             side_effect=FakeModel,
         ):
             output = GeminiKeyPool(settings, generation_config={"temperature": 0.0}).generate_text("hello")

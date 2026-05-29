@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.news_tool.storage import canonicalize_url
+from agents.news_agent.storage import canonicalize_url
 
 
 class NewsStorageUrlTests(TestCase):

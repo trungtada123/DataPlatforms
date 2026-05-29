@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.news_tool.config import get_news_tool_settings
+from agents.news_agent.config import get_news_tool_settings
 
 
 class NewsToolConfigTests(TestCase):

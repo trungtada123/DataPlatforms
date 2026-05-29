@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.orchestration.contracts import IntentPlan, ToolName
-from stock_etl.orchestration.router import ToolRouter
+from orchestration.contracts import IntentPlan, ToolName
+from orchestration.router_core import ToolRouter
 
 
 class ToolRouterTests(TestCase):

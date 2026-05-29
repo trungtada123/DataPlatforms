@@ -1,4 +1,4 @@
-from stock_etl.transformers import normalize_daily_raw_rows
+from ingestion.market_data.transformer import normalize_daily_raw_rows
 
 
 def test_normalize_daily_raw_rows_flags_zero_reference_fields() -> None:

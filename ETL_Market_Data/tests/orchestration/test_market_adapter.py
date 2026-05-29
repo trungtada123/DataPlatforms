@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
-from stock_etl.orchestration.market_adapter import MarketToolAdapter
-from stock_etl.orchestration.trace import TraceCollector
+from orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
+from orchestration.market_adapter import MarketToolAdapter
+from orchestration.trace import TraceCollector
 
 
 class MarketAdapterTests(TestCase):
@@ -56,7 +56,7 @@ class MarketAdapterTests(TestCase):
             ),
         )
 
-        with patch("stock_etl.orchestration.market_adapter.GeminiSQLAssistant") as assistant_cls:
+        with patch("orchestration.market_adapter.GeminiSQLAssistant") as assistant_cls:
             assistant_cls.return_value.ask.return_value = {
                 "question": request.query,
                 "sql": "SELECT ticker, flag_above_ma50 FROM vw_daily_stock_llm LIMIT 1",

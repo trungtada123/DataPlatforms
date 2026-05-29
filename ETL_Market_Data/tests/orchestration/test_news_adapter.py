@@ -5,10 +5,10 @@ from __future__ import annotations
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.news_tool.schemas import NewsCrawledArticle, NewsToolResponse
-from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
-from stock_etl.orchestration.news_adapter import NewsToolAdapter
-from stock_etl.orchestration.trace import TraceCollector
+from agents.news_agent.schemas import NewsCrawledArticle, NewsToolResponse
+from orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
+from orchestration.news_adapter import NewsToolAdapter
+from orchestration.trace import TraceCollector
 
 
 class NewsAdapterTests(TestCase):
@@ -64,7 +64,7 @@ class NewsAdapterTests(TestCase):
             raw_response={"query": request.query},
         )
 
-        with patch("stock_etl.orchestration.news_adapter.NewsToolService") as service_cls:
+        with patch("orchestration.news_adapter.NewsToolService") as service_cls:
             service_cls.return_value.ask.return_value = fake_response
             result = adapter.run(request, trace_collector=TraceCollector("trace-news"))
 

@@ -135,6 +135,16 @@ Recommended future canonical PYTHONPATH:
 3. `Wave 8`: remove `agents._legacy` only after zero verified usage
 4. `Wave 9`: remove `src/stock_etl` only when zero runtime/test/script/DAG blockers remain
 
+## Wave 7C Status Update
+- Normal tests now prefer canonical backend imports (`agents.*`, `orchestration.*`, `core.*`, `ingestion.*`) instead of direct `stock_etl.*` imports.
+- Legacy path checks are now concentrated into explicit compatibility coverage:
+  - `tests/compat/test_legacy_stock_etl_imports.py`
+  - existing migration compatibility checks under `tests/agents/*_canonical_migration.py`, `tests/core/test_shared_core_canonical_migration.py`, `tests/financial_reports_tool/test_imports.py`
+- Compatibility policy is explicit:
+  - canonical behavior tests should not depend on legacy `stock_etl` imports
+  - legacy imports remain only in compatibility tests until final shim retirement wave
+  - `src/stock_etl` deletion is blocked until compatibility tests are intentionally removed/replaced
+
 ## Exact Next Prompt
 ```text
 You are executing Wave 7C: compatibility tests split/update for legacy-shim retirement readiness.

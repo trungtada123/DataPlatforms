@@ -8,7 +8,7 @@ from unittest.mock import patch
 from orchestration.state import build_initial_state
 from orchestration.nodes.classifier import classify
 from orchestration.nodes.router import route
-from stock_etl.orchestration.contracts import IntentPlan, ToolName
+from orchestration.contracts import IntentPlan, ToolName
 
 
 class BackendOrchestrationNodesTests(TestCase):

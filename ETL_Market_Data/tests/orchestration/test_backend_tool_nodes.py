@@ -10,8 +10,8 @@ from orchestration.nodes.merger import merge
 from orchestration.nodes.synthesizer import synthesize
 from orchestration.nodes.tools import run_market_agent, run_news_agent
 from orchestration.state import build_initial_state
-from stock_etl.orchestration.context_merger import MergedContext
-from stock_etl.orchestration.contracts import (
+from orchestration.context_merger import MergedContext
+from orchestration.contracts import (
     IntentPlan,
     ToolExecutionResult,
     ToolExecutionStatus,
