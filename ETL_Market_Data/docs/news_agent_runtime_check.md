@@ -146,3 +146,23 @@ Remaining limitations:
   - `query_used` is plain clean text (not raw dict-string).
   - News-only negative query remains routed as `tools_used=["news"]`.
   - Search has better chance to return results for Vietnamese negative-news intent even when planner started from English-style structured payload.
+
+## Wave 1 Canonical Ownership Migration
+- Status: completed on branch `test1` after syncing latest fixes from `origin/test`.
+- Canonical source of truth is now:
+  - `backend/src/agents/news_agent/config.py`
+  - `backend/src/agents/news_agent/schemas.py`
+  - `backend/src/agents/news_agent/database.py`
+  - `backend/src/agents/news_agent/search.py`
+  - `backend/src/agents/news_agent/crawler.py`
+  - `backend/src/agents/news_agent/storage.py`
+  - `backend/src/agents/news_agent/summarizer.py`
+  - `backend/src/agents/news_agent/service.py`
+  - `backend/src/agents/news_agent/qa.py`
+- Legacy compatibility shims retained under:
+  - `src/stock_etl/news_tool/{config,schemas,database,search,crawler,storage,summarizer,service}.py`
+  - each shim maps to corresponding canonical module via module aliasing.
+- Verified outcomes:
+  - `backend/src` no longer imports `stock_etl.news_tool` for News runtime.
+  - legacy imports still work for tests and adapters.
+  - targeted + full test suites pass after inversion.

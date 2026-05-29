@@ -16,6 +16,30 @@ It is planning-only and does not authorize implementation in the current phase.
 - Multiple modules in `backend/src` still facade/wrap legacy implementations.
 - This is intentional until zero-import dependency on `src/stock_etl` can be proven.
 
+## Wave 1 Status Update (News Agent)
+- Wave 1 is completed on `test1`: News Agent ownership has been inverted.
+- Canonical News source of truth is now fully under `backend/src/agents/news_agent`.
+- Legacy `src/stock_etl/news_tool/*` modules remain as compatibility shims that alias/re-export canonical modules.
+- Result:
+  - backend News runtime no longer imports `stock_etl.news_tool`.
+  - Legacy imports continue to work for adapters/tests during transition.
+
+### Canonical -> Compatibility Mapping
+- `backend/src/agents/news_agent/config.py` <-shim-> `src/stock_etl/news_tool/config.py`
+- `backend/src/agents/news_agent/schemas.py` <-shim-> `src/stock_etl/news_tool/schemas.py`
+- `backend/src/agents/news_agent/database.py` <-shim-> `src/stock_etl/news_tool/database.py`
+- `backend/src/agents/news_agent/search.py` <-shim-> `src/stock_etl/news_tool/search.py`
+- `backend/src/agents/news_agent/crawler.py` <-shim-> `src/stock_etl/news_tool/crawler.py`
+- `backend/src/agents/news_agent/storage.py` <-shim-> `src/stock_etl/news_tool/storage.py`
+- `backend/src/agents/news_agent/summarizer.py` <-shim-> `src/stock_etl/news_tool/summarizer.py`
+- `backend/src/agents/news_agent/service.py` <-shim-> `src/stock_etl/news_tool/service.py`
+
+### Remaining `stock_etl` Coupling Outside News
+- Market still uses `stock_etl.nl2sql` via backend facades.
+- Financial agent/runtime still uses `stock_etl.financial_reports_tool.*` via backend facades.
+- Orchestration nodes/classifier/router/merger/synthesizer still depend on `stock_etl.orchestration.*`.
+- Shared core helpers still bridge to legacy modules (`core.llm_pool`, `core.vector_store`, orchestration workflow path bootstrap).
+
 ## Non-Negotiable Rule for Migration Execution
 - Do not run manual broad find/replace migration.
 - Do not remove `src/stock_etl` during interim waves.
