@@ -454,3 +454,27 @@ Final report:
 - smoke result
 - residual risks
 ```
+
+## Branch Reconciliation Status
+- Checked at: 2026-05-29 (Asia/Saigon)
+- `origin/test` HEAD: `7998e0ca2ab165621d1b7c4f4da3cc250f1c67cf`
+- `origin/test1` HEAD: `43260bba54361046b5656a508530f09b6d40f395`
+- `origin/test1` contains latest internal handover and News stabilization lineage:
+  - security hygiene baseline (`1a691d9`)
+  - News runtime/checkpoint fixes (`709a8b4`, `99f3c3b`, `daf2023`, `9b573ee`, `f8f54fe`)
+  - internal handover package (`7998e0c`)
+  - migration planning + Wave 1 canonicalization (`076e195`, `43260bb`)
+- Verified key handover files exist on `origin/test1`:
+  - `docs/api_specs.md`
+  - `docs/handover_guide.md`
+  - `docs/future_physical_migration_plan.md`
+  - `scripts/smoke_handover_check.py`
+  - `scripts/check_news_crawler_runtime.py`
+  - `scripts/check_no_tracked_secrets.py`
+- Verified stabilization guards on `origin/test1`:
+  - backend Dockerfile installs Playwright Chromium
+  - backend service has `shm_size: "1gb"` in compose
+  - News query normalization helper exists in canonical path
+  - `backend/src/agents/news_agent/*` does not import `stock_etl.news_tool`
+  - `src/stock_etl/news_tool/*` acts as compatibility shims to canonical backend modules
+- Reconciliation result: safe to proceed to Wave 2 on `test1` (no missing prerequisite fixes detected in this audit pass).
