@@ -45,14 +45,14 @@ docker compose exec airflow-webserver python -m stock_etl.cli backfill --start-d
 ### Airflow
 
 - Username: `admin`
-- Password: `admin123`
+- Password: `your_airflow_admin_password`
 
 ### Adminer
 
 - System: `PostgreSQL`
 - Server: `postgres`
 - Username: `stock_user`
-- Password: `stock_pass`
+- Password: `your_postgres_password`
 - Database: `ssi_market`
 
 ## 7. Hỏi thử một câu

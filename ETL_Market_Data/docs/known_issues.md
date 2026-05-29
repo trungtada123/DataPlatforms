@@ -17,6 +17,14 @@
   - `.env.local.example`
   - `.env.docker.example`
 
+## Security Hygiene Policy
+
+- Example configuration/docs/scripts must use placeholders only (for example: `your_*`, `${ENV_VAR}`, or `<REDACTED_...>`), never concrete credential values.
+- A lightweight tracked-file scanner is available at `scripts/check_no_tracked_secrets.py`.
+- Run before commits:
+  - `python scripts/check_no_tracked_secrets.py`
+- The scanner reports only file path + pattern type and exits non-zero when REAL_SECRET-like patterns are detected.
+
 ## Monitoring Limitation: Airflow Metrics Scrape
 
 - Prometheus scrape for `airflow-webserver` has been disabled because the prior target used `/health` JSON, which is not Prometheus text format.
