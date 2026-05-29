@@ -30,3 +30,12 @@
 - Prometheus scrape for `airflow-webserver` has been disabled because the prior target used `/health` JSON, which is not Prometheus text format.
 - Backend metrics scraping remains enabled via `/metrics`.
 - To monitor Airflow in Prometheus, configure a real metrics endpoint/exporter and then re-enable an Airflow scrape job.
+
+## News Crawler Runtime Prerequisite (Playwright Chromium)
+
+- The News Agent crawler (`crawl4ai`) requires Playwright Chromium binaries.
+- Local development setup:
+  - Run `python -m playwright install chromium`
+- On Linux hosts, Playwright may also require additional system packages before browser launch succeeds.
+- Docker backend runtime:
+  - The backend image now bakes Chromium during build, so container runtime should not need manual browser install.
