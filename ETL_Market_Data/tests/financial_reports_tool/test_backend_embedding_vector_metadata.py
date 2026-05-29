@@ -74,7 +74,25 @@ class BackendEmbeddingVectorMetadataTests(TestCase):
                 section_title="S1",
                 page_start=1,
                 page_end=1,
-                metadata={"chunk_type": "text"},
+                metadata={
+                    "retrieval_id": "financial_report_vi_doc_chunk_0001",
+                    "doc_id": "ACB_Q2_2025",
+                    "ticker": "ACB",
+                    "fiscal_year": 2025,
+                    "quarter": 2,
+                    "period": "6T",
+                    "scope": "Congtyme",
+                    "report_type": "Soatxet",
+                    "report_family": "BCTC",
+                    "page": 7,
+                    "chunk_type": "table_row",
+                    "raw_content": "Tong tai san | 911.617.856",
+                    "content_for_embedding": "Tong tai san | 30.6.2025=911.617.856",
+                    "source_ids": ["table-1", "row-1"],
+                    "row_label": "Tong tai san",
+                    "row_values": {"30.6.2025": "911.617.856"},
+                    "parent_table_id": "table-1",
+                },
             )
         ]
 
@@ -83,6 +101,15 @@ class BackendEmbeddingVectorMetadataTests(TestCase):
             report = write_chunks("bctc_chunks", embedded, store=fake_store)
 
         fake_client.upsert.assert_called_once()
+        point_payload = fake_client.upsert.call_args.kwargs["points"][0]["payload"]
+        self.assertEqual(point_payload["retrieval_id"], "financial_report_vi_doc_chunk_0001")
+        self.assertEqual(point_payload["ticker"], "ACB")
+        self.assertEqual(point_payload["year"], 2025)
+        self.assertEqual(point_payload["chunk_type"], "table_row")
+        self.assertEqual(point_payload["page"], 7)
+        self.assertEqual(point_payload["raw_content"], "Tong tai san | 911.617.856")
+        self.assertEqual(point_payload["metadata"]["row_values"], {"30.6.2025": "911.617.856"})
+        self.assertEqual(point_payload["source_ids"], ["table-1", "row-1"])
         self.assertEqual(report.collection, "bctc_chunks")
         self.assertEqual(report.attempted, 1)
         self.assertEqual(report.upserted, 1)

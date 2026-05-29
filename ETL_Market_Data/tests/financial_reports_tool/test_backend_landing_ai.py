@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from ingestion.financial_reports.landing_ai import LandingAIResult, ocr_pdf
+from ingestion.financial_reports.landing_ai import LandingAIParseError, LandingAIResult, ocr_pdf, parse_pdf_with_agentic_doc
 
 
 class BackendLandingAITests(TestCase):
@@ -85,3 +86,67 @@ class BackendLandingAITests(TestCase):
         ):
             with self.assertRaises(FileNotFoundError):
                 ocr_pdf(Path("D:/not/exist/report.pdf"), metadata={"doc_id": "D4"})
+
+    def test_agentic_doc_parse_extracts_markdown_chunks_pages_and_tables(self) -> None:
+        fake_chunk = SimpleNamespace(
+            chunk_type=SimpleNamespace(value="table"),
+            grounding=[SimpleNamespace(page=0)],
+            text="| Chi tieu | 2025 |\n| --- | --- |\n| Tai san | 100 |",
+        )
+        fake_doc = SimpleNamespace(
+            doc_type="financial_report",
+            start_page_idx=0,
+            end_page_idx=1,
+            markdown="# Bao cao\n\nNoi dung",
+            chunks=[fake_chunk],
+        )
+        parse_documents = lambda paths: [fake_doc]
+
+        with patch("ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
+            "os.environ",
+            {"VISION_AGENT_API_KEY": "test-key"},
+            clear=True,
+        ):
+            result = parse_pdf_with_agentic_doc(
+                b"%PDF-1.6",
+                metadata={
+                    "doc_id": "ACB_2025_Q2",
+                    "ticker": "ACB",
+                    "fiscal_year": 2025,
+                    "quarter": 2,
+                    "period": "Q2",
+                    "report_type": "Soatxet",
+                    "report_family": "BCTC",
+                    "scope": "Congtyme",
+                },
+                parse_documents_callable=parse_documents,
+            )
+
+        self.assertEqual(result.markdown, "# Bao cao\n\nNoi dung")
+        self.assertEqual(result.doc_id, "ACB_2025_Q2")
+        self.assertEqual(result.pages, {"start_page_idx": 0, "end_page_idx": 1, "page_count": 2})
+        self.assertEqual(result.json_payload["total_chunks"], 1)
+        self.assertEqual(result.json_payload["chunks"][0]["type"], "table")
+        self.assertEqual(result.json_payload["chunks"][0]["page"], 1)
+        self.assertEqual(result.json_payload["tables_count"], 1)
+
+    def test_agentic_doc_requires_vision_agent_api_key(self) -> None:
+        with patch("ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
+            "os.environ",
+            {},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(ValueError, "VISION_AGENT_API_KEY"):
+                parse_pdf_with_agentic_doc(b"%PDF-1.6", parse_documents_callable=lambda paths: [])
+
+    def test_agentic_doc_quota_error_is_wrapped_clearly(self) -> None:
+        def parse_documents(_: list[str]) -> list[object]:
+            raise RuntimeError("HTTP 429 quota exceeded")
+
+        with patch("ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
+            "os.environ",
+            {"VISION_AGENT_API_KEY": "test-key"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(LandingAIParseError, "quota/credit"):
+                parse_pdf_with_agentic_doc(b"%PDF-1.6", parse_documents_callable=parse_documents)

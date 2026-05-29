@@ -1,16 +1,20 @@
-"""Cấu hình runtime cho financial reports tool."""
+"""Compatibility settings contract for legacy financial reports imports."""
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
-from ..config import Settings, get_settings
+from ._backend import ensure_backend_src_on_path
+
+
+ensure_backend_src_on_path()
+
+from config.financial import get_financial_settings
 
 
 @dataclass(slots=True)
 class FinancialReportsToolSettings:
-    """Typed settings riêng cho financial reports runtime path."""
+    """Legacy-compatible settings shape used by existing tests and callers."""
 
     qdrant_url: str
     qdrant_collection: str
@@ -27,47 +31,31 @@ class FinancialReportsToolSettings:
     groq_max_retries: int
     groq_retry_delay_seconds: float
     groq_base_url: str
+    parsed_output_dir: str | None = None
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+def get_financial_reports_settings() -> FinancialReportsToolSettings:
+    """Return canonical backend settings in the legacy-compatible shape."""
 
-
-def get_financial_reports_settings(settings: Settings | None = None) -> FinancialReportsToolSettings:
-    """Nạp settings cho financial reports tool từ env và settings chung."""
-
-    base_settings = settings or get_settings()
-    groq_api_keys_raw = os.getenv("FINANCIAL_REPORTS_GROQ_API_KEYS")
-    if groq_api_keys_raw:
-        groq_api_keys = [item.strip() for item in groq_api_keys_raw.split(",") if item.strip()]
-    else:
-        single_groq_key = os.getenv("FINANCIAL_REPORTS_GROQ_API_KEY", "").strip()
-        groq_api_keys = [single_groq_key] if single_groq_key else list(base_settings.groq_api_keys)
-
-    tool_settings = FinancialReportsToolSettings(
-        qdrant_url=os.getenv("FINANCIAL_REPORTS_QDRANT_URL", "http://localhost:6333").strip(),
-        qdrant_collection=os.getenv("FINANCIAL_REPORTS_QDRANT_COLLECTION", "bctc_chunks").strip(),
-        qdrant_api_key=os.getenv("FINANCIAL_REPORTS_QDRANT_API_KEY") or None,
-        embedding_model=os.getenv("FINANCIAL_REPORTS_EMBEDDING_MODEL", "BAAI/bge-m3").strip(),
-        embedding_device=os.getenv("FINANCIAL_REPORTS_EMBEDDING_DEVICE") or None,
-        top_k=int(os.getenv("FINANCIAL_REPORTS_TOP_K", "12")),
-        context_items=int(os.getenv("FINANCIAL_REPORTS_CONTEXT_ITEMS", "4")),
-        enable_llm_rewrite=_env_bool("FINANCIAL_REPORTS_ENABLE_LLM_REWRITE", True),
-        groq_api_key=groq_api_keys[0] if groq_api_keys else base_settings.groq_api_key,
-        groq_api_keys=groq_api_keys,
-        groq_model=os.getenv("FINANCIAL_REPORTS_GROQ_MODEL", base_settings.groq_model).strip(),
-        groq_timeout_seconds=base_settings.groq_timeout_seconds,
-        groq_max_retries=base_settings.groq_max_retries,
-        groq_retry_delay_seconds=base_settings.groq_retry_delay_seconds,
-        groq_base_url=base_settings.groq_base_url,
+    settings = get_financial_settings()
+    return FinancialReportsToolSettings(
+        qdrant_url=settings.qdrant_url,
+        qdrant_collection=settings.qdrant_collection,
+        qdrant_api_key=settings.qdrant_api_key,
+        embedding_model=settings.embedding_model,
+        embedding_device=settings.embedding_device,
+        top_k=settings.top_k,
+        context_items=settings.context_items,
+        enable_llm_rewrite=settings.enable_llm_rewrite,
+        groq_api_key=settings.groq_api_key,
+        groq_api_keys=list(settings.groq_api_keys),
+        groq_model=settings.groq_model,
+        groq_timeout_seconds=settings.groq_timeout_seconds,
+        groq_max_retries=settings.groq_max_retries,
+        groq_retry_delay_seconds=settings.groq_retry_delay_seconds,
+        groq_base_url=settings.groq_base_url,
+        parsed_output_dir=settings.parsed_output_dir,
     )
-    if tool_settings.top_k <= 0:
-        raise ValueError("FINANCIAL_REPORTS_TOP_K must be positive.")
-    if tool_settings.context_items <= 0:
-        raise ValueError("FINANCIAL_REPORTS_CONTEXT_ITEMS must be positive.")
-    if not tool_settings.qdrant_collection:
-        raise ValueError("FINANCIAL_REPORTS_QDRANT_COLLECTION must not be empty.")
-    return tool_settings
+
+
+__all__ = ["FinancialReportsToolSettings", "get_financial_reports_settings"]

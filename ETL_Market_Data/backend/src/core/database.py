@@ -207,6 +207,54 @@ DDL_STATEMENTS: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_intraday_prices_ticker_date_ts_desc ON intraday_prices (ticker, trading_date, \"timestamp\" DESC)",
     "CREATE INDEX IF NOT EXISTS idx_intraday_prices_trading_date_ticker_ts_desc ON intraday_prices (trading_date, ticker, \"timestamp\" DESC)",
     "CREATE INDEX IF NOT EXISTS idx_intraday_prices_updated_at ON intraday_prices (updated_at DESC)",
+    """
+    CREATE TABLE IF NOT EXISTS financial_report_documents (
+        id BIGSERIAL PRIMARY KEY,
+        doc_id VARCHAR(255) NOT NULL,
+        ticker VARCHAR(20) NOT NULL,
+        fiscal_year INTEGER NOT NULL,
+        period VARCHAR(50) NOT NULL,
+        quarter INTEGER,
+        report_type VARCHAR(50),
+        report_family VARCHAR(50),
+        scope VARCHAR(50),
+        source VARCHAR(100) NOT NULL,
+        source_url TEXT,
+        raw_path TEXT,
+        markdown_path TEXT,
+        json_path TEXT,
+        qdrant_collection VARCHAR(255),
+        status VARCHAR(50) NOT NULL DEFAULT 'DISCOVERED',
+        error_message TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_financial_report_documents_doc_id UNIQUE (doc_id),
+        CONSTRAINT ck_financial_report_documents_status
+            CHECK (status IN ('DISCOVERED', 'DOWNLOADED', 'PARSED', 'CHUNKED', 'EMBEDDED', 'FAILED')),
+        CONSTRAINT ck_financial_report_documents_quarter
+            CHECK (quarter IS NULL OR quarter BETWEEN 1 AND 4)
+    )
+    """,
+    "COMMENT ON TABLE financial_report_documents IS 'Metadata and lifecycle status for financial report RAG ingestion.'",
+    "COMMENT ON COLUMN financial_report_documents.doc_id IS 'Stable document id shared across RabbitMQ, MinIO, PostgreSQL, and Qdrant.'",
+    "COMMENT ON COLUMN financial_report_documents.status IS 'Current ingest status: DISCOVERED, DOWNLOADED, PARSED, CHUNKED, EMBEDDED, FAILED.'",
+    "CREATE INDEX IF NOT EXISTS idx_financial_report_documents_ticker_year ON financial_report_documents (ticker, fiscal_year DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_financial_report_documents_status ON financial_report_documents (status)",
+    """
+    CREATE TABLE IF NOT EXISTS financial_report_ingest_events (
+        id BIGSERIAL PRIMARY KEY,
+        doc_id VARCHAR(255) NOT NULL,
+        event_type VARCHAR(100) NOT NULL,
+        old_status VARCHAR(50),
+        new_status VARCHAR(50),
+        message TEXT,
+        error_detail TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "COMMENT ON TABLE financial_report_ingest_events IS 'Append-only lifecycle events for financial reports ingestion.'",
+    "CREATE INDEX IF NOT EXISTS idx_financial_report_ingest_events_doc_id ON financial_report_ingest_events (doc_id)",
+    "CREATE INDEX IF NOT EXISTS idx_financial_report_ingest_events_created_at ON financial_report_ingest_events (created_at DESC)",
 ]
 
 VIEW_STATEMENTS: list[str] = [
@@ -783,5 +831,4 @@ def cleanup_intraday_before(session: Session, trading_date: Any) -> int:
         {"trading_date": trading_date},
     )
     return result.rowcount or 0
-
 
