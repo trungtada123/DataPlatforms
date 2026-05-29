@@ -19,6 +19,7 @@ airflow-webserver.pid
 exports/*.dump
 !exports/.gitkeep
 !exports/ssi_market_stock_only.dump
+news_artifacts/
 
 # Artifact crawl/query hash directories at repo root
 /[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
