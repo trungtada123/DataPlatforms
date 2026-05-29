@@ -84,6 +84,28 @@ It is planning-only and does not authorize implementation in the current phase.
   - keep old nl2sql facade import path
   - gate rollout by per-endpoint feature toggle if needed
 
+## Wave 2 Status Update (Market NL2SQL)
+- Wave 2 is completed on `test1`: Market NL2SQL ownership has been inverted.
+- Canonical Market NL2SQL source of truth is now under:
+  - `backend/src/agents/market_agent/nl2sql.py`
+  - `backend/src/agents/market_agent/sql_executor.py`
+  - `backend/src/agents/market_agent/qa.py`
+- Legacy `src/stock_etl/nl2sql.py` now remains as compatibility shim aliasing canonical market module.
+- Result:
+  - backend market runtime no longer imports `stock_etl.nl2sql`.
+  - legacy imports continue to work for adapters/tests via shim.
+  - read-only SQL guard contract remains unchanged (`SELECT/WITH` only + forbidden DDL/DML keywords blocked).
+
+### Canonical -> Compatibility Mapping
+- `backend/src/agents/market_agent/nl2sql.py` <-shim-> `src/stock_etl/nl2sql.py`
+- `backend/src/agents/market_agent/sql_executor.py` remains canonical executor and is re-exported by `src/stock_etl/database.py`
+- `backend/src/agents/market_agent/qa.py` now directly uses canonical market assistant path
+
+### Remaining `stock_etl` Coupling Outside Market
+- Financial agent/runtime still uses `stock_etl.financial_reports_tool.*` via backend facades.
+- Orchestration nodes/classifier/router/merger/synthesizer still depend on `stock_etl.orchestration.*`.
+- Shared core helpers still bridge to legacy modules (`core.llm_pool`, `core.vector_store`, orchestration workflow path bootstrap).
+
 ## Wave 3: Financial Runtime Canonical Migration
 - Goal:
   - Decouple financial query runtime from legacy runtime path and complete canonical ingestion surface.
