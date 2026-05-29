@@ -81,3 +81,22 @@ Update after fix:
    - Docker: backend image now bakes Chromium during build.
 2. For host-local direct testing, use a host-reachable DB host configuration (or run direct QA smoke tests inside Docker backend where service DNS is available).
 3. Keep current graceful error behavior so `/query` remains stable when external crawler runtime is unavailable.
+
+## News Quality Follow-up
+- Implemented ranking/deduplication improvements in News summarizer selection pipeline:
+  - canonical URL normalization removes tracking parameters (`utm_*`, `fbclid`, `gclid`, etc.).
+  - duplicate removal by canonical URL and near-duplicate title/topic heuristics.
+  - recency scoring now has stronger weight for latest/recent intent.
+  - intent-aware scoring for negative-news and stock/company context.
+  - financial/business domains are boosted for stock/company intents.
+  - entertainment/product-noise content is penalized for stock-negative queries.
+  - final selected list is capped at top 5 with debug reasons for selection/rejection.
+- Verified behavior for query:
+  - `Có tin tức tiêu cực nào gần đây về FPT không?`
+  - route remains `tools_used=["news"]`
+  - selected articles are unique by canonical URL and capped (`<= 5`)
+  - fallback negative-note is explicit when no clearly negative signal is found.
+
+Remaining limitations:
+- Live web result quality still depends on DuckDuckGo index freshness and what source sites publish at query time.
+- For some runs, latest crawled set may contain mostly neutral corporate articles, so response can still be "closest relevant latest" with explicit "no clear negative" note.
