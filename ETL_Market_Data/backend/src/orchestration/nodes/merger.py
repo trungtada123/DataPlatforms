@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from stock_etl.orchestration.context_merger import ContextMerger
-from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionResult
+from ..context_merger import ContextMerger
+from ..contracts import IntentPlan, ToolExecutionResult
 
 from ..state import OrchestrationState
 

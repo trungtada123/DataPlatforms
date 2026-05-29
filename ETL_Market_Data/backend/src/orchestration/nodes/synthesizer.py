@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from stock_etl.orchestration.context_merger import MergedContext
-from stock_etl.orchestration.final_synthesizer import FinalSynthesizer
+from ..context_merger import MergedContext
+from ..final_synthesizer import FinalSynthesizer
 
 from ..state import OrchestrationState
 

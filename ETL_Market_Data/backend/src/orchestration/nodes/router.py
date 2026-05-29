@@ -5,8 +5,8 @@ from __future__ import annotations
 import unicodedata
 from typing import Any
 
-from stock_etl.orchestration.contracts import ToolName
-from stock_etl.orchestration.router import ToolRouter
+from ..contracts import IntentPlan, ToolName
+from ..router_core import ToolRouter
 
 from ..state import OrchestrationState
 
@@ -89,8 +89,6 @@ def route(state: OrchestrationState) -> dict[str, Any]:
         }
 
     try:
-        from stock_etl.orchestration.contracts import IntentPlan
-
         plan = IntentPlan.model_validate(plan_payload)
     except Exception as exc:  # noqa: BLE001
         errors.append(f"intent_plan_invalid:{exc}")

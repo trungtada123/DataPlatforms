@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from stock_etl.orchestration.intent_classifier import IntentClassifier
+from ..intent_classifier import IntentClassifier
 
 from ..state import OrchestrationState
 
@@ -74,4 +74,3 @@ def classify(state: OrchestrationState) -> dict[str, Any]:
         "errors": errors,
         "metadata": metadata,
     }
-

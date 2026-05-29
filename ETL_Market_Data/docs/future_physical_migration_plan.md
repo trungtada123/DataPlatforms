@@ -170,6 +170,40 @@ It is planning-only and does not authorize implementation in the current phase.
 - `core.vector_store` still wraps legacy financial Qdrant store path.
 - Airflow DAG imports `stock_etl.pipeline` remain intentionally via compatibility shim.
 
+## Wave 5 Status Update (Orchestration Cleanup)
+- Wave 5 is completed on `test1`: orchestration ownership has been inverted to backend canonical modules.
+- Canonical orchestration source of truth is now under:
+  - `backend/src/orchestration/workflow.py`
+  - `backend/src/orchestration/state.py`
+  - `backend/src/orchestration/contracts.py`
+  - `backend/src/orchestration/{intent_classifier,router_core,context_merger,final_synthesizer}.py`
+  - `backend/src/orchestration/{market_adapter,news_adapter,reports_adapter,runtime_readiness,trace}.py`
+  - `backend/src/orchestration/nodes/{classifier,router,tools,merger,synthesizer}.py`
+  - `backend/src/schemas/orchestration.py`
+- Legacy `src/stock_etl/orchestration/*.py` modules now remain as compatibility shims that alias/re-export canonical orchestration modules.
+- Result:
+  - backend runtime no longer imports `stock_etl.orchestration` in orchestration execution path.
+  - API `/query` wiring stays on canonical backend path (`api/query.py` -> `orchestration.workflow.run_query`).
+  - legacy imports for tests/scripts remain functional via shims.
+
+### Canonical -> Compatibility Mapping
+- `backend/src/orchestration/contracts.py` <-shim-> `src/stock_etl/orchestration/contracts.py`
+- `backend/src/orchestration/intent_classifier.py` <-shim-> `src/stock_etl/orchestration/intent_classifier.py`
+- `backend/src/orchestration/router_core.py` <-shim-> `src/stock_etl/orchestration/router.py`
+- `backend/src/orchestration/context_merger.py` <-shim-> `src/stock_etl/orchestration/context_merger.py`
+- `backend/src/orchestration/final_synthesizer.py` <-shim-> `src/stock_etl/orchestration/final_synthesizer.py`
+- `backend/src/orchestration/market_adapter.py` <-shim-> `src/stock_etl/orchestration/market_adapter.py`
+- `backend/src/orchestration/news_adapter.py` <-shim-> `src/stock_etl/orchestration/news_adapter.py`
+- `backend/src/orchestration/reports_adapter.py` <-shim-> `src/stock_etl/orchestration/reports_adapter.py`
+- `backend/src/orchestration/runtime_readiness.py` <-shim-> `src/stock_etl/orchestration/runtime_readiness.py`
+- `backend/src/orchestration/trace.py` <-shim-> `src/stock_etl/orchestration/trace.py`
+- `backend/src/orchestration/orchestration_api.py` <-shim-> `src/stock_etl/orchestration/orchestration_api.py`
+
+### Remaining `stock_etl` Coupling Outside Orchestration
+- Financial agent/runtime still depends on legacy `stock_etl.financial_reports_tool.*` modules by design until Financial wave.
+- `core.vector_store` still wraps legacy financial Qdrant store path.
+- Airflow DAG imports `stock_etl.pipeline` remain intentionally via compatibility shim.
+
 ## Wave 5: Financial Runtime Canonical Migration
 - Goal:
   - Decouple financial query runtime from legacy runtime path and complete canonical ingestion surface.

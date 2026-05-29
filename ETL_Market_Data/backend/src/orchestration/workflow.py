@@ -6,7 +6,6 @@ import threading
 import uuid
 from typing import Any, Protocol, cast
 
-from agents._legacy import ensure_legacy_src_on_path
 from schemas.orchestration import (
     DebugTrace,
     IntentPlan,
@@ -27,9 +26,6 @@ from .nodes import (
     synthesize,
 )
 from .state import OrchestrationState, build_initial_state
-
-ensure_legacy_src_on_path()
-
 
 class _WorkflowRunner(Protocol):
     def invoke(self, state: OrchestrationState) -> OrchestrationState: ...
