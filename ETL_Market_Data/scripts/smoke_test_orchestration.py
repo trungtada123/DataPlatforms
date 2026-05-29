@@ -11,7 +11,8 @@ from typing import Any
 
 import requests
 
-from stock_etl.config import PROJECT_ROOT, get_settings
+from config.base import PROJECT_ROOT
+from config.settings import get_settings
 from stock_etl.orchestration.contracts import ToolName
 from stock_etl.orchestration.intent_classifier import IntentClassifier
 from stock_etl.orchestration.runtime_readiness import (

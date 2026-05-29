@@ -134,7 +134,43 @@ It is planning-only and does not authorize implementation in the current phase.
 - Shared core helpers still bridge to legacy modules (`core.llm_pool`, `core.vector_store`, orchestration workflow path bootstrap).
 - Airflow DAGs currently import `stock_etl.pipeline` by design and resolve via compatibility shim.
 
-## Wave 4: Financial Runtime Canonical Migration
+## Wave 4 Status Update (Config/Core/Schema Cleanup)
+- Wave 4 is completed on `test1`: shared infra ownership has been canonicalized to backend modules.
+- Canonical shared source of truth is now under:
+  - `backend/src/config/*`
+  - `backend/src/core/database.py`
+  - `backend/src/core/models.py`
+  - `backend/src/core/llm_pool.py`
+  - `backend/src/schemas/*`
+- Legacy modules now kept as compatibility shims/bridges:
+  - `src/stock_etl/config.py` -> compatibility bridge to canonical `config.*`
+  - `src/stock_etl/models.py` -> shim alias to `core.models`
+  - `src/stock_etl/gemini_pool.py` -> shim alias to `core.llm_pool`
+  - `src/stock_etl/groq_pool.py` -> shim alias to `core.llm_pool`
+  - `src/stock_etl/database.py` -> compatibility bridge re-exporting `core.database` + `execute_readonly_sql` from `agents.market_agent.sql_executor`
+- Result:
+  - backend runtime no longer imports `stock_etl.config`, `stock_etl.models`, `stock_etl.gemini_pool`, `stock_etl.groq_pool`.
+  - environment variable names/default semantics are preserved.
+  - SQL read-only executor remains outside `core.database` (stays in `agents.market_agent.sql_executor`).
+
+### Canonical -> Compatibility Mapping
+- `backend/src/config/settings.py` + `backend/src/config/base.py` <-bridge-> `src/stock_etl/config.py`
+- `backend/src/core/models.py` <-shim-> `src/stock_etl/models.py`
+- `backend/src/core/llm_pool.py` <-shim-> `src/stock_etl/gemini_pool.py`
+- `backend/src/core/llm_pool.py` <-shim-> `src/stock_etl/groq_pool.py`
+- `backend/src/core/database.py` + `backend/src/agents/market_agent/sql_executor.py` <-bridge-> `src/stock_etl/database.py`
+
+### Bridge Modules Left and Why
+- `src/stock_etl/database.py` intentionally remains a bridge because legacy scripts and adapters still import this path and still need `execute_readonly_sql` re-export without moving SQL safety logic back into `core`.
+- `backend/src/schemas/orchestration.py` still wraps legacy orchestration contracts to preserve contract parity until Wave 5 orchestration cleanup.
+
+### Remaining `stock_etl` Coupling Outside Shared Infra
+- Orchestration nodes/classifier/router/merger/synthesizer still depend on `stock_etl.orchestration.*`.
+- Financial agent/runtime still depends on legacy `stock_etl.financial_reports_tool.*` modules by design until Financial wave.
+- `core.vector_store` still wraps legacy financial Qdrant store path.
+- Airflow DAG imports `stock_etl.pipeline` remain intentionally via compatibility shim.
+
+## Wave 5: Financial Runtime Canonical Migration
 - Goal:
   - Decouple financial query runtime from legacy runtime path and complete canonical ingestion surface.
 - Impact analysis required:
