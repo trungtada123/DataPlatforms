@@ -106,7 +106,35 @@ It is planning-only and does not authorize implementation in the current phase.
 - Orchestration nodes/classifier/router/merger/synthesizer still depend on `stock_etl.orchestration.*`.
 - Shared core helpers still bridge to legacy modules (`core.llm_pool`, `core.vector_store`, orchestration workflow path bootstrap).
 
-## Wave 3: Financial Runtime Canonical Migration
+## Wave 3 Status Update (Market Ingestion)
+- Wave 3 is completed on `test1`: Market ingestion ownership has been inverted to canonical backend modules.
+- Canonical Market ingestion source of truth is now under:
+  - `backend/src/ingestion/market_data/loader.py`
+  - `backend/src/ingestion/market_data/extractor.py`
+  - `backend/src/ingestion/market_data/ssi_client.py`
+  - `backend/src/ingestion/market_data/transformer.py`
+  - `backend/src/ingestion/market_data/__init__.py`
+- Legacy modules now kept as compatibility entrypoints:
+  - `src/stock_etl/pipeline.py`
+  - `src/stock_etl/ssi_client.py`
+  - `src/stock_etl/transformers.py`
+- Result:
+  - backend ingestion runtime no longer imports legacy market ingestion modules.
+  - legacy DAG/tests imports continue to work through compatibility shims.
+  - public ingestion facade remains stable (`bootstrap_history`, `refresh_intraday`, `finalize_eod`).
+
+### Canonical -> Compatibility Mapping
+- `backend/src/ingestion/market_data/__init__.py` + `loader.py` <-shim-> `src/stock_etl/pipeline.py`
+- `backend/src/ingestion/market_data/ssi_client.py` <-shim-> `src/stock_etl/ssi_client.py`
+- `backend/src/ingestion/market_data/transformer.py` <-shim-> `src/stock_etl/transformers.py`
+
+### Remaining `stock_etl` Coupling Outside Market Ingestion
+- Financial agent/runtime still uses `stock_etl.financial_reports_tool.*` via backend facades.
+- Orchestration nodes/classifier/router/merger/synthesizer still depend on `stock_etl.orchestration.*`.
+- Shared core helpers still bridge to legacy modules (`core.llm_pool`, `core.vector_store`, orchestration workflow path bootstrap).
+- Airflow DAGs currently import `stock_etl.pipeline` by design and resolve via compatibility shim.
+
+## Wave 4: Financial Runtime Canonical Migration
 - Goal:
   - Decouple financial query runtime from legacy runtime path and complete canonical ingestion surface.
 - Impact analysis required:
