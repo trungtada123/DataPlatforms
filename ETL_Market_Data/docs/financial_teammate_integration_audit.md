@@ -113,6 +113,14 @@ The following backend files must not be overwritten by legacy migration scripts:
   - Do not overwrite teammate backend financial modules with legacy `stock_etl` code.
   - Deep Financial ETL/OCR/Qdrant hardening remains postponed.
 
+## Wave 6E Update (Financial Config Bridge Canonicalization)
+- `backend/src/agents/financial_agent/config.py` no longer imports `stock_etl.financial_reports_tool.config`.
+- Backend financial config facade now resolves directly from canonical `config.financial`:
+  - `FinancialReportsToolSettings` -> alias of `config.financial.FinancialSettings`
+  - `get_financial_reports_settings(...)` -> canonical wrapper over `get_financial_settings()`
+- Legacy `src/stock_etl/financial_reports_tool/config.py` remains as compatibility shim for old import paths.
+- No Financial business logic, ETL flow, or Qdrant/OCR behavior was changed in this wave.
+
 ### Backend/src classification for legacy financial references
 - `should invert shim now`: none (already inverted for `financial_reports_tool` path)
 - `should keep bridge temporarily`: not applicable inside `backend/src` for this pattern

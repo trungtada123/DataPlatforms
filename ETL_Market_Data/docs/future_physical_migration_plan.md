@@ -316,3 +316,10 @@ It is planning-only and does not authorize implementation in the current phase.
 - Policy remains strict:
   - no legacy overwrite into backend Financial modules
   - deep Financial ETL/OCR/Qdrant hardening is postponed.
+
+## Wave 6E Status Update (Financial Config Bridge Canonicalization)
+- Wave 6E completed as minimal bridge cleanup.
+- `backend/src/agents/financial_agent/config.py` is now canonical-only and no longer depends on `stock_etl.financial_reports_tool.config`.
+- Legacy config path under `src/stock_etl/financial_reports_tool/config.py` remains as compatibility shim for old imports.
+- Financial runtime behavior/settings contract is preserved (same env vars, defaults, and names).
+- Deep Financial ETL/OCR/Qdrant hardening remains postponed.

@@ -66,6 +66,7 @@
 - Legacy `stock_etl` coupling remains by design in this phase.
 - Compatibility layer (`agents._legacy` and related wrappers) must remain until cutover wave is explicitly approved.
 - For Financial modules, remaining legacy coupling is now primarily compatibility shims plus compatibility-focused tests/docs.
+- Financial config facade under `backend/src/agents/financial_agent/config.py` has been canonicalized; remaining Financial legacy usage is compatibility-oriented.
 
 ## News Artifacts Policy
 - `news_artifacts/` contains runtime crawl outputs and should be treated as local runtime artifacts, not source-of-truth fixtures.

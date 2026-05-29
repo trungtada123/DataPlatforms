@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from unittest import TestCase
 
 
@@ -21,11 +22,16 @@ class FinancialReportsImportTests(TestCase):
 
     def test_canonical_backend_financial_imports_are_available(self) -> None:
         from agents.financial_agent import qa as qa_module
+        from agents.financial_agent.config import FinancialReportsToolSettings, get_financial_reports_settings
         from agents.financial_agent.query_embedder import FinancialReportsEmbedder
         from agents.financial_agent.retrieval import build_plan
         from agents.financial_agent.service import FinancialReportsQueryService
+        from config.financial import FinancialSettings, get_financial_settings
         from ingestion.financial_reports.chunker import chunk_document
         from ingestion.financial_reports.markdown_parser import parse_landingai_output
+
+        canonical_settings = get_financial_settings()
+        facade_settings = get_financial_reports_settings()
 
         self.assertTrue(callable(qa_module.answer))
         self.assertTrue(callable(build_plan))
@@ -33,6 +39,9 @@ class FinancialReportsImportTests(TestCase):
         self.assertTrue(callable(chunk_document))
         self.assertEqual(FinancialReportsQueryService.__name__, "FinancialReportsQueryService")
         self.assertEqual(FinancialReportsEmbedder.__name__, "FinancialReportsEmbedder")
+        self.assertIs(FinancialReportsToolSettings, FinancialSettings)
+        self.assertIsInstance(facade_settings, FinancialSettings)
+        self.assertEqual(facade_settings.qdrant_collection, canonical_settings.qdrant_collection)
 
     def test_legacy_runtime_service_resolves_to_canonical_backend_module(self) -> None:
         from stock_etl.financial_reports_tool.runtime.query_service import FinancialReportsQueryService as LegacyService
@@ -45,3 +54,29 @@ class FinancialReportsImportTests(TestCase):
         self.assertTrue(FinancialReportsEmbedder._should_retry_on_cpu(RuntimeError("CUDA error: out of memory")))
         self.assertTrue(FinancialReportsEmbedder._should_retry_on_cpu(RuntimeError("Cannot copy out of meta tensor")))
         self.assertFalse(FinancialReportsEmbedder._should_retry_on_cpu(RuntimeError("unexpected generic runtime error")))
+
+    def test_canonical_financial_config_facade_is_legacy_bridge_free(self) -> None:
+        from agents.financial_agent import config as financial_config_module
+        from agents.financial_agent.config import (
+            FinancialReportsToolSettings as CanonicalFinancialReportsToolSettings,
+            get_financial_reports_settings as get_canonical_financial_reports_settings,
+        )
+        from config.financial import FinancialSettings
+        from stock_etl.financial_reports_tool.config import (
+            FinancialReportsToolSettings as LegacyFinancialReportsToolSettings,
+            get_financial_reports_settings as get_legacy_financial_reports_settings,
+        )
+
+        with open(financial_config_module.__file__, "r", encoding="utf-8") as stream:
+            module_source = stream.read()
+
+        self.assertNotIn("stock_etl.financial_reports_tool.config", module_source)
+        self.assertNotIn("from stock_etl", module_source)
+        self.assertNotIn("import stock_etl", module_source)
+
+        self.assertIs(CanonicalFinancialReportsToolSettings, FinancialSettings)
+        self.assertEqual(LegacyFinancialReportsToolSettings.__name__, "FinancialReportsToolSettings")
+
+        canonical_settings = get_canonical_financial_reports_settings()
+        legacy_settings = get_legacy_financial_reports_settings()
+        self.assertEqual(asdict(legacy_settings), asdict(canonical_settings))
