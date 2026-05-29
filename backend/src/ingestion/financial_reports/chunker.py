@@ -6,7 +6,7 @@ import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
-from utils.metrics import record_ingestion_chunks
+from src.utils.metrics import record_ingestion_chunks
 
 from .markdown_parser import ParsedDocument, ParsedSection, ParsedTable
 

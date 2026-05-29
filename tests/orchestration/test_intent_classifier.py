@@ -7,9 +7,9 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.orchestration.fallback_rules import build_rule_based_intent_plan
-from stock_etl.orchestration.contracts import ToolName
-from stock_etl.orchestration.intent_classifier import IntentClassifier
+from src.orchestration.nodes.classifier import build_rule_based_intent_plan
+from src.schemas.orchestration import ToolName
+from src.orchestration.nodes.classifier import IntentClassifier
 
 
 class IntentClassifierTests(TestCase):
@@ -190,3 +190,4 @@ class IntentClassifierTests(TestCase):
         )
 
         self.assertEqual(plan.tool_queries["financial_reports"], question)
+

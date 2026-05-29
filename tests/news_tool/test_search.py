@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import TestCase
 
-from stock_etl.news_tool.config import NewsToolSettings
-from stock_etl.news_tool.schemas import NewsSearchHit
-from stock_etl.news_tool.search import DuckDuckGoNewsSearch
+from src.config.news import NewsToolSettings
+from src.schemas.api import NewsSearchHit
+from src.agents.news_agent.search import DuckDuckGoNewsSearch
 
 
 class DuckDuckGoNewsSearchTests(TestCase):
@@ -108,3 +108,4 @@ class DuckDuckGoNewsSearchTests(TestCase):
         self.assertTrue(any("tiêu cực" in item.lower() or "tieu cuc" in item.lower() for item in candidates))
         self.assertTrue(any("rủi ro" in item.lower() or "rui ro" in item.lower() for item in candidates))
         self.assertTrue(any("gần đây" in item.lower() or "gan day" in item.lower() for item in candidates))
+

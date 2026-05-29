@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from agents._legacy import ensure_legacy_src_on_path
-from schemas.orchestration import AgentResult, IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
-
-ensure_legacy_src_on_path()
+from src.schemas.orchestration import AgentResult, IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
 
 from .nl2sql import GeminiSQLAssistant
 

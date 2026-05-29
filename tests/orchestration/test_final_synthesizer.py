@@ -6,9 +6,9 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.orchestration.context_merger import MergedContext
-from stock_etl.orchestration.final_synthesizer import FinalSynthesizer
-from stock_etl.orchestration.trace import TraceCollector
+from src.orchestration.nodes.merger import MergedContext
+from src.orchestration.nodes.synthesizer import FinalSynthesizer
+from src.schemas.orchestration import TraceCollector
 
 
 class FinalSynthesizerTests(TestCase):
@@ -88,3 +88,4 @@ class FinalSynthesizerTests(TestCase):
         self.assertEqual(result.model_name, "deterministic-fallback")
         self.assertIn("Các điểm ủng hộ hiện có", result.answer)
         self.assertIn("Rủi ro và điểm cần thận trọng", result.answer)
+

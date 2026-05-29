@@ -37,7 +37,7 @@ class FinancialSettings:
     groq_max_retries: int
     groq_retry_delay_seconds: float
     groq_base_url: str
-    parsed_output_dir: str | None
+    parsed_output_dir: str | None = None
 
 
 def get_financial_settings() -> FinancialSettings:
@@ -80,3 +80,7 @@ def get_financial_settings() -> FinancialSettings:
         raise ValueError("FINANCIAL_REPORTS_QDRANT_COLLECTION must not be empty.")
     return settings
 
+
+# Backward-compatible names retained for migrated financial-agent modules.
+FinancialReportsToolSettings = FinancialSettings
+get_financial_reports_settings = get_financial_settings

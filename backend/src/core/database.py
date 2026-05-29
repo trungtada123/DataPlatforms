@@ -12,8 +12,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from config import get_settings
-from core.models import DailyStockFeature, DailyStockRaw, IntradayPrice, Symbol
+from src.config import get_settings
+from src.core.models import DailyStockFeature, DailyStockRaw, IntradayPrice, Symbol
 
 
 DDL_STATEMENTS: list[str] = [

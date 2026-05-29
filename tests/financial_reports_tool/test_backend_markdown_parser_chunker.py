@@ -6,8 +6,8 @@ import json
 from pathlib import Path
 from unittest import TestCase
 
-from ingestion.financial_reports.chunker import chunk_document
-from ingestion.financial_reports.markdown_parser import ParsedDocument, parse_landingai_output
+from src.ingestion.financial_reports.chunker import chunk_document
+from src.ingestion.financial_reports.markdown_parser import ParsedDocument, parse_landingai_output
 
 
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "landingai_output_mock.json"
@@ -58,3 +58,4 @@ class BackendMarkdownParserChunkerTests(TestCase):
             chunk_document(parsed, target_tokens=0, overlap=0)
         with self.assertRaises(ValueError):
             chunk_document(parsed, target_tokens=16, overlap=16)
+

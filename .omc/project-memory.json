@@ -1,0 +1,188 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1780085477982,
+  "projectRoot": "c:\\Data\\Ki2-nam4\\nentangdulieu\\project\\DataPlatforms\\DataPlatforms",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "pip",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "scripts",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "backend": {
+      "path": "backend",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1780085477884,
+      "keyFiles": [
+        "requirements.txt"
+      ]
+    },
+    "configs": {
+      "path": "configs",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1780085477885,
+      "keyFiles": [
+        "rabbitmq.conf"
+      ]
+    },
+    "dags": {
+      "path": "dags",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1780085477885,
+      "keyFiles": [
+        "financial_ingest_dag.py",
+        "ssi_bootstrap_history.py",
+        "ssi_intraday_session.py"
+      ]
+    },
+    "docker": {
+      "path": "docker",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1780085477886,
+      "keyFiles": [
+        "airflow.Dockerfile",
+        "backend.Dockerfile",
+        "worker.Dockerfile"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 12,
+      "lastAccessed": 1780085477888,
+      "keyFiles": [
+        "AI_PROJECT_HANDOVER.md",
+        "api_specs.md",
+        "architecture.md",
+        "database.md",
+        "future_physical_migration_plan.md"
+      ]
+    },
+    "exports": {
+      "path": "exports",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1780085477888,
+      "keyFiles": [
+        "ssi_market_stock_only.dump"
+      ]
+    },
+    "logs": {
+      "path": "logs",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1780085477889,
+      "keyFiles": []
+    },
+    "monitoring": {
+      "path": "monitoring",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1780085477890,
+      "keyFiles": []
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 8,
+      "lastAccessed": 1780085477890,
+      "keyFiles": [
+        "audit_raw_anomalies.py",
+        "bootstrap_dev_stack.ps1",
+        "check_news_crawler_runtime.py",
+        "check_no_tracked_secrets.py",
+        "restore_market_dump.ps1"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 5,
+      "lastAccessed": 1780085477891,
+      "keyFiles": [
+        "test_gemini_pool.py",
+        "test_groq_pool.py",
+        "test_market_transformer.py",
+        "test_nl2sql_local_answer.py",
+        "__init__.py"
+      ]
+    },
+    "tmp": {
+      "path": "tmp",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1780085477892,
+      "keyFiles": []
+    },
+    "backend\\src": {
+      "path": "backend\\src",
+      "purpose": "Source code",
+      "fileCount": 2,
+      "lastAccessed": 1780085477894,
+      "keyFiles": [
+        "main.py",
+        "__init__.py"
+      ]
+    },
+    "backend\\tests": {
+      "path": "backend\\tests",
+      "purpose": "Test files",
+      "fileCount": 1,
+      "lastAccessed": 1780085477895,
+      "keyFiles": [
+        "__init__.py"
+      ]
+    },
+    "tests\\fixtures": {
+      "path": "tests\\fixtures",
+      "purpose": "Test fixtures",
+      "fileCount": 1,
+      "lastAccessed": 1780085477902,
+      "keyFiles": [
+        "landingai_output_mock.json"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}

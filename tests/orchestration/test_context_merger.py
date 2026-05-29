@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.orchestration.context_merger import ContextMerger
-from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
+from src.orchestration.nodes.merger import ContextMerger
+from src.schemas.orchestration import IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
 
 
 class ContextMergerTests(TestCase):
@@ -140,3 +140,4 @@ class ContextMergerTests(TestCase):
         merged_context = merger.merge(plan.original_query, results, plan)
 
         self.assertEqual(merged_context.answer_style, "balanced_investment_view")
+

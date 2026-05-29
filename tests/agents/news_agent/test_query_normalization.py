@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from agents.news_agent.qa import normalize_news_tool_query
+from src.agents.news_agent.qa import normalize_news_tool_query
 
 
 class NewsQueryNormalizationTests(TestCase):
@@ -28,4 +28,5 @@ class NewsQueryNormalizationTests(TestCase):
         self.assertIn("FPT negative news", query)
         self.assertIn("recent", query)
         self.assertNotIn('{"query"', query)
+
 

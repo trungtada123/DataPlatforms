@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from core.database import get_engine
+from src.core.database import get_engine
 
 _FORBIDDEN_SQL_KEYWORDS = re.compile(
     r"\b(insert|update|delete|drop|alter|truncate|grant|revoke|create|copy|merge)\b",

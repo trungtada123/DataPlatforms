@@ -6,14 +6,14 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import patch
 
-from ingestion.financial_reports.landing_ai import LandingAIResult, ocr_pdf
+from src.ingestion.financial_reports.landing_ai import LandingAIResult, ocr_pdf
 
 
 class BackendLandingAITests(TestCase):
     """Validate env checks and request/response handling for LandingAI wrapper."""
 
     def test_missing_api_key_raises_clear_error(self) -> None:
-        with patch("ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
+        with patch("src.ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
             "os.environ",
             {"LANDINGAI_ENDPOINT": "https://example.com/ocr"},
             clear=True,
@@ -22,7 +22,7 @@ class BackendLandingAITests(TestCase):
                 ocr_pdf(b"%PDF-1.4", metadata={"doc_id": "D1"})
 
     def test_missing_endpoint_raises_clear_error(self) -> None:
-        with patch("ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
+        with patch("src.ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
             "os.environ",
             {"LANDINGAI_API_KEY": "test-key"},
             clear=True,
@@ -31,7 +31,7 @@ class BackendLandingAITests(TestCase):
                 ocr_pdf(b"%PDF-1.4", metadata={"doc_id": "D1"})
 
     def test_request_error_is_wrapped(self) -> None:
-        with patch("ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
+        with patch("src.ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
             "os.environ",
             {
                 "LANDINGAI_API_KEY": "test-key",
@@ -56,7 +56,7 @@ class BackendLandingAITests(TestCase):
                     "pages": 2,
                 }
 
-        with patch("ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
+        with patch("src.ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
             "os.environ",
             {
                 "LANDINGAI_API_KEY": "test-key",
@@ -75,7 +75,7 @@ class BackendLandingAITests(TestCase):
         self.assertEqual(mocked_post.call_count, 1)
 
     def test_path_not_found_raises(self) -> None:
-        with patch("ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
+        with patch("src.ingestion.financial_reports.landing_ai.load_environment"), patch.dict(
             "os.environ",
             {
                 "LANDINGAI_API_KEY": "test-key",
@@ -85,3 +85,4 @@ class BackendLandingAITests(TestCase):
         ):
             with self.assertRaises(FileNotFoundError):
                 ocr_pdf(Path("D:/not/exist/report.pdf"), metadata={"doc_id": "D4"})
+

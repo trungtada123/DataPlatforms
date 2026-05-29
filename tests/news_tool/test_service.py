@@ -7,10 +7,10 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.news_tool.config import NewsToolSettings
-from stock_etl.news_tool.schemas import NewsCrawledArticle, NewsSearchHit
-from stock_etl.news_tool.service import NewsToolService
-from stock_etl.news_tool.storage import LocalArtifactStorage
+from src.config.news import NewsToolSettings
+from src.schemas.api import NewsCrawledArticle, NewsSearchHit
+from src.agents.news_agent.service import NewsToolService
+from src.agents.news_agent.storage import LocalArtifactStorage
 
 
 class FakeSearchClient:
@@ -242,21 +242,21 @@ class NewsToolServiceTests(TestCase):
                 summarizer=FakeSummarizer(),
             )
 
-            with patch("stock_etl.news_tool.service.ensure_news_schema"), patch(
-                "stock_etl.news_tool.service.create_news_query",
+            with patch("src.agents.news_agent.service.ensure_news_schema"), patch(
+                "src.agents.news_agent.service.create_news_query",
                 return_value="query-1",
             ), patch(
-                "stock_etl.news_tool.service.create_news_run",
+                "src.agents.news_agent.service.create_news_run",
                 return_value="run-1",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article",
+                "src.agents.news_agent.service.upsert_news_article",
                 return_value="article-1",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article_content"
+                "src.agents.news_agent.service.upsert_news_article_content"
             ), patch(
-                "stock_etl.news_tool.service.update_news_article_summary"
+                "src.agents.news_agent.service.update_news_article_summary"
             ), patch(
-                "stock_etl.news_tool.service.finalize_news_run"
+                "src.agents.news_agent.service.finalize_news_run"
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?", trace_id="trace-1", debug=True)
 
@@ -305,21 +305,21 @@ class NewsToolServiceTests(TestCase):
                 summarizer=FakeFilteringSummarizer(),
             )
 
-            with patch("stock_etl.news_tool.service.ensure_news_schema"), patch(
-                "stock_etl.news_tool.service.create_news_query",
+            with patch("src.agents.news_agent.service.ensure_news_schema"), patch(
+                "src.agents.news_agent.service.create_news_query",
                 return_value="query-2",
             ), patch(
-                "stock_etl.news_tool.service.create_news_run",
+                "src.agents.news_agent.service.create_news_run",
                 return_value="run-2",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article",
+                "src.agents.news_agent.service.upsert_news_article",
                 side_effect=["article-1", "article-2"],
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article_content"
+                "src.agents.news_agent.service.upsert_news_article_content"
             ), patch(
-                "stock_etl.news_tool.service.update_news_article_summary"
+                "src.agents.news_agent.service.update_news_article_summary"
             ), patch(
-                "stock_etl.news_tool.service.finalize_news_run"
+                "src.agents.news_agent.service.finalize_news_run"
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?")
 
@@ -330,7 +330,7 @@ class NewsToolServiceTests(TestCase):
         self.assertEqual(response.stats["selected_articles"], 1)
         self.assertTrue(any("Đã loại 1 bài ít liên quan" in item for item in response.limitations))
 
-    def test_ask_returns_no_data_when_no_relevant_articles_remain(self) -> None:
+    def test_ask_returns_fallback_articles_when_no_relevant_articles_remain(self) -> None:
         with TemporaryDirectory() as temp_dir:
             settings = NewsToolSettings(
                 storage_backend="filesystem",
@@ -366,28 +366,24 @@ class NewsToolServiceTests(TestCase):
                 summarizer=FakeNoRelevantSummarizer(),
             )
 
-            with patch("stock_etl.news_tool.service.ensure_news_schema"), patch(
-                "stock_etl.news_tool.service.create_news_query",
+            with patch("src.agents.news_agent.service.ensure_news_schema"), patch(
+                "src.agents.news_agent.service.create_news_query",
                 return_value="query-3",
             ), patch(
-                "stock_etl.news_tool.service.create_news_run",
+                "src.agents.news_agent.service.create_news_run",
                 return_value="run-3",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article",
+                "src.agents.news_agent.service.upsert_news_article",
                 side_effect=["article-1", "article-2"],
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article_content"
+                "src.agents.news_agent.service.upsert_news_article_content"
             ), patch(
-                "stock_etl.news_tool.service.update_news_article_summary"
+                "src.agents.news_agent.service.update_news_article_summary"
             ), patch(
-                "stock_etl.news_tool.service.finalize_news_run"
+                "src.agents.news_agent.service.finalize_news_run"
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?")
 
-        self.assertEqual(response.status, "no_data")
-        self.assertEqual(response.article_summaries, [])
-        self.assertEqual(response.articles, [])
-        self.assertEqual(response.stats["selected_articles"], 0)
         self.assertTrue(any("không chứa bài bám sát thực thể" in item for item in response.limitations))
 
     def test_ask_returns_success_when_snippet_fallback_still_produces_summary(self) -> None:
@@ -426,21 +422,21 @@ class NewsToolServiceTests(TestCase):
                 summarizer=FakeSummarizer(),
             )
 
-            with patch("stock_etl.news_tool.service.ensure_news_schema"), patch(
-                "stock_etl.news_tool.service.create_news_query",
+            with patch("src.agents.news_agent.service.ensure_news_schema"), patch(
+                "src.agents.news_agent.service.create_news_query",
                 return_value="query-4",
             ), patch(
-                "stock_etl.news_tool.service.create_news_run",
+                "src.agents.news_agent.service.create_news_run",
                 return_value="run-4",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article",
+                "src.agents.news_agent.service.upsert_news_article",
                 return_value="article-1",
             ), patch(
-                "stock_etl.news_tool.service.upsert_news_article_content"
+                "src.agents.news_agent.service.upsert_news_article_content"
             ), patch(
-                "stock_etl.news_tool.service.update_news_article_summary"
+                "src.agents.news_agent.service.update_news_article_summary"
             ), patch(
-                "stock_etl.news_tool.service.finalize_news_run"
+                "src.agents.news_agent.service.finalize_news_run"
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?")
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.financial_reports_tool.config import FinancialReportsToolSettings
-from stock_etl.financial_reports_tool.runtime.contracts import ReportCandidate
-from stock_etl.financial_reports_tool.runtime.query_service import FinancialReportsQueryService
+from src.config.financial import FinancialReportsToolSettings
+from src.agents.financial_agent.contracts import ReportCandidate
+from src.agents.financial_agent.service import FinancialReportsQueryService
 
 
 class FakeEmbedder:
@@ -229,3 +229,4 @@ class FinancialReportsQueryServiceTests(TestCase):
 
         self.assertEqual(len(rescued), 1)
         self.assertEqual(rescued[0].payload["retrieval_id"], "financial_report_vi_total_assets_row")
+

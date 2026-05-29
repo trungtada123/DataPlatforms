@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.orchestration.contracts import ToolName
-from stock_etl.orchestration.runtime_readiness import (
+from src.schemas.orchestration import ToolName
+from src.orchestration.workflow import (
     READINESS_NO_DATA,
     READINESS_SERVICE_UNREACHABLE,
     ReadinessCheck,
@@ -52,3 +52,4 @@ class RuntimeReadinessTests(TestCase):
 
         self.assertEqual(readiness.primary_failure_category, READINESS_SERVICE_UNREACHABLE)
         self.assertEqual(summarize_preflight_blocker(readiness), "Không kết nối được PostgreSQL dev.")
+

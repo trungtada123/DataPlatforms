@@ -6,9 +6,9 @@ import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from config.base import load_environment
-from config.financial import get_financial_settings
-from utils.logger import get_logger
+from src.config.base import load_environment
+from src.config.financial import get_financial_settings
+from src.utils.logger import get_logger
 
 from .chunker import Chunk
 
@@ -40,7 +40,7 @@ def _resolve_embed_batch_size() -> int:
 
 def _build_embedder() -> Any:
     settings = get_financial_settings()
-    from agents.financial_agent.query_embedder import FinancialReportsEmbedder
+    from src.agents.financial_agent.query_embedder import FinancialReportsEmbedder
 
     return FinancialReportsEmbedder(
         settings.embedding_model,

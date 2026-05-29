@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.financial_reports_tool.config import FinancialReportsToolSettings
-from stock_etl.financial_reports_tool.runtime.synthesis import FinancialReportsSynthesizer
+from src.config.financial import FinancialReportsToolSettings
+from src.agents.financial_agent.synthesis import FinancialReportsSynthesizer
 
 
 class FinancialReportsSynthesisTests(TestCase):
@@ -107,3 +107,4 @@ class FinancialReportsSynthesisTests(TestCase):
         self.assertIn("tại 30/06/2025 là 619.850.276", answer)
         self.assertIn("tại 31/12/2024 là 569.734.624", answer)
         self.assertIn("page=6", answer)
+

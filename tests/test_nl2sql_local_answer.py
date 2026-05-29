@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from stock_etl.nl2sql import _local_answer
+from src.agents.market_agent.nl2sql import _local_answer
 
 
 class LocalAnswerRegressionTest(unittest.TestCase):
@@ -66,3 +66,4 @@ class LocalAnswerRegressionTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

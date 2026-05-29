@@ -1,1 +1,2 @@
 """Tests cho news tool."""
+

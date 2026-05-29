@@ -7,10 +7,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from agents._legacy import ensure_legacy_src_on_path
-from schemas.orchestration import AgentResult, IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
-
-ensure_legacy_src_on_path()
+from src.schemas.orchestration import AgentResult, IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
 
 from .service import NewsToolService
 

@@ -6,9 +6,9 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any
 
-from config.financial import get_financial_settings
-from core.vector_store import FinancialReportsQdrantStore
-from utils.logger import get_logger
+from src.config.financial import get_financial_settings
+from src.core.vector_store import FinancialReportsQdrantStore
+from src.utils.logger import get_logger
 
 from .embedder import EmbeddedChunk
 

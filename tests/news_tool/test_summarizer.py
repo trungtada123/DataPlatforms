@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import TestCase
 
-from stock_etl.news_tool.config import NewsToolSettings
-from stock_etl.news_tool.summarizer import NewsSummarizer
+from src.config.news import NewsToolSettings
+from src.agents.news_agent.summarizer import NewsSummarizer
 
 
 class NewsSummarizerTests(TestCase):
@@ -342,3 +342,4 @@ class NewsSummarizerTests(TestCase):
         self.assertGreaterEqual(len(selected), 1)
         self.assertEqual(selected[0]["article_id"], "finance")
         self.assertNotIn("entertainment", {item["article_id"] for item in selected})
+

@@ -9,7 +9,7 @@ from typing import Any
 
 import requests
 
-from config import Settings, require_ssi_settings
+from src.config import Settings, require_ssi_settings
 
 from .transformer import ddmmyyyy
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.orchestration.contracts import IntentPlan, ToolName
-from stock_etl.orchestration.router import ToolRouter
+from src.schemas.orchestration import IntentPlan, ToolName
+from src.orchestration.nodes.router import ToolRouter
 
 
 class ToolRouterTests(TestCase):
@@ -117,3 +117,4 @@ class ToolRouterTests(TestCase):
         self.assertEqual(len(requests), 1)
         self.assertEqual(requests[0].tool_name, ToolName.FINANCIAL_REPORTS)
         self.assertEqual(router.unsupported_tools(plan), [])
+

@@ -28,7 +28,7 @@ def ssi_bootstrap_history() -> None:
 
     @task
     def run_bootstrap() -> dict:
-        from stock_etl.pipeline import bootstrap_history
+        from src.ingestion.market_data import bootstrap_history
 
         return bootstrap_history()
 

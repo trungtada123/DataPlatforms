@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from config.base import load_environment
-from core.llm_pool import call_with_retry
-from utils.logger import get_logger
+from src.config.base import load_environment
+from src.core.llm_pool import call_with_retry
+from src.utils.logger import get_logger
 
 
 LOGGER = get_logger(__name__)

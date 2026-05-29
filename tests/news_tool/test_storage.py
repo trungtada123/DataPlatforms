@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.news_tool.storage import canonicalize_url
+from src.agents.news_agent.storage import canonicalize_url
 
 
 class NewsStorageUrlTests(TestCase):
@@ -20,3 +20,4 @@ class NewsStorageUrlTests(TestCase):
             canonical,
             "https://cafef.vn/fpt-cap-nhat-188260528170618458.chn?id=42",
         )
+

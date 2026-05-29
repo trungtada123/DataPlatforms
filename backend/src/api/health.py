@@ -8,9 +8,9 @@ from fastapi import APIRouter, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from core.database import get_engine
-from schemas.api import HealthResponse
-from utils.metrics import refresh_rabbitmq_queue_depth, render_metrics
+from src.core.database import get_engine
+from src.schemas.api import HealthResponse
+from src.utils.metrics import refresh_rabbitmq_queue_depth, render_metrics
 
 
 router = APIRouter(tags=["system"])

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from .base import get_base_settings, load_environment
 from .llm import get_llm_settings
@@ -55,13 +56,17 @@ class NewsSettings:
     groq_api_keys: list[str]
     timezone: str
 
+    @property
+    def tzinfo(self) -> ZoneInfo:
+        return ZoneInfo(self.timezone)
 
-def get_news_settings() -> NewsSettings:
+
+def get_news_settings(settings: object | None = None) -> NewsSettings:
     """Build news settings from environment variables."""
 
     load_environment()
     base = get_base_settings()
-    llm = get_llm_settings()
+    llm = settings or get_llm_settings()
 
     artifact_root_raw = os.getenv("NEWS_ARTIFACT_ROOT", "").strip()
     artifact_root = Path(artifact_root_raw).expanduser() if artifact_root_raw else None
@@ -112,3 +117,7 @@ def get_news_settings() -> NewsSettings:
         raise ValueError("NEWS_SUMMARIZER_PROVIDER must be one of: groq, gemini, fallback.")
     return settings
 
+
+# Backward-compatible names retained for migrated news-agent modules.
+NewsToolSettings = NewsSettings
+get_news_tool_settings = get_news_settings

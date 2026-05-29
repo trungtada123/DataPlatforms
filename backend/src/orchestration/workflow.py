@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import threading
 import uuid
+from dataclasses import dataclass, field
 from typing import Any, Protocol, cast
 
-from agents._legacy import ensure_legacy_src_on_path
-from schemas.orchestration import (
+from src.schemas.orchestration import (
     DebugTrace,
     IntentPlan,
     NormalizedQueryResponse,
@@ -27,8 +27,6 @@ from .nodes import (
     synthesize,
 )
 from .state import OrchestrationState, build_initial_state
-
-ensure_legacy_src_on_path()
 
 
 class _WorkflowRunner(Protocol):
@@ -59,6 +57,86 @@ _TOOL_NODE_RUNNERS = {
     "financial": run_financial_agent,
     "financial_reports": run_financial_agent,
 }
+
+READINESS_SUCCESS = "success"
+READINESS_DEPENDENCY_MISSING = "dependency_missing"
+READINESS_CONFIG_INVALID = "config_invalid"
+READINESS_SERVICE_UNREACHABLE = "service_unreachable"
+READINESS_COLLECTION_MISSING = "collection_missing"
+READINESS_NO_DATA = "no_data"
+
+
+@dataclass(slots=True)
+class ReadinessCheck:
+    """One runtime dependency check result."""
+
+    name: str
+    category: str
+    detail: str
+    is_blocking: bool
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        return self.category == READINESS_SUCCESS
+
+
+@dataclass(slots=True)
+class ToolRuntimeReadiness:
+    """Aggregated readiness status for one tool."""
+
+    tool_name: ToolName
+    runtime_ready: bool
+    end_to_end_ready: bool
+    checks: list[ReadinessCheck] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def primary_failure_category(self) -> str:
+        for check in self.checks:
+            if check.is_blocking and not check.ok:
+                return check.category
+        for check in self.checks:
+            if not check.ok:
+                return check.category
+        return READINESS_SUCCESS
+
+    @property
+    def blocking_failures(self) -> list[ReadinessCheck]:
+        return [check for check in self.checks if check.is_blocking and not check.ok]
+
+    @property
+    def data_gaps(self) -> list[ReadinessCheck]:
+        return [check for check in self.checks if not check.is_blocking and not check.ok]
+
+
+def dependency_names_for_tools(tool_names: list[ToolName]) -> list[str]:
+    """Return deduped dependency names for the requested tools."""
+
+    dependencies: list[str] = []
+    for tool_name in tool_names:
+        if tool_name == ToolName.MARKET:
+            dependencies.extend(["postgres", "gemini"])
+        elif tool_name == ToolName.NEWS:
+            dependencies.extend(["postgres", "ddgs", "crawl4ai", "groq_or_gemini"])
+        elif tool_name == ToolName.FINANCIAL_REPORTS:
+            dependencies.extend(["qdrant", "sentence_transformers", "groq"])
+
+    deduped: list[str] = []
+    for dependency in dependencies:
+        if dependency not in deduped:
+            deduped.append(dependency)
+    return deduped
+
+
+def summarize_preflight_blocker(readiness: ToolRuntimeReadiness) -> str:
+    """Summarize the first blocking readiness issue for API/debug output."""
+
+    if readiness.blocking_failures:
+        return " | ".join(check.detail for check in readiness.blocking_failures)
+    if readiness.data_gaps:
+        return " | ".join(check.detail for check in readiness.data_gaps)
+    return f"Tool `{readiness.tool_name.value}` da san sang."
 
 
 def build_workflow() -> _WorkflowRunner:
@@ -430,4 +508,18 @@ def _build_debug_trace(
     )
 
 
-__all__ = ["build_workflow", "get_workflow", "run_query"]
+__all__ = [
+    "READINESS_COLLECTION_MISSING",
+    "READINESS_CONFIG_INVALID",
+    "READINESS_DEPENDENCY_MISSING",
+    "READINESS_NO_DATA",
+    "READINESS_SERVICE_UNREACHABLE",
+    "READINESS_SUCCESS",
+    "ReadinessCheck",
+    "ToolRuntimeReadiness",
+    "build_workflow",
+    "dependency_names_for_tools",
+    "get_workflow",
+    "run_query",
+    "summarize_preflight_blocker",
+]

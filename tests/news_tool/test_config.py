@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.news_tool.config import get_news_tool_settings
+from src.config.news import get_news_tool_settings
 
 
 class NewsToolConfigTests(TestCase):
@@ -33,3 +33,4 @@ class NewsToolConfigTests(TestCase):
             settings = get_news_tool_settings(settings_like)
 
         self.assertEqual(settings.artifact_root.name, "news_artifacts")
+

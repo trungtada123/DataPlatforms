@@ -12,8 +12,8 @@ except Exception:  # pragma: no cover
     FastAPI = None  # type: ignore[assignment,misc]
     app = None
 else:
-    from api import build_api_router
-    from utils.metrics import observe_api_request_duration
+    from src.api import build_api_router
+    from src.utils.metrics import observe_api_request_duration
 
     app = FastAPI(title="DataPlatforms Backend API", version="0.1.0-refactor")
 

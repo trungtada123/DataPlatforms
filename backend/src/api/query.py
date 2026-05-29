@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from schemas.orchestration import NormalizedQueryRequest, NormalizedQueryResponse
-from orchestration.workflow import run_query
+from src.schemas.orchestration import NormalizedQueryRequest, NormalizedQueryResponse
+from src.orchestration.workflow import run_query
 
 
 router = APIRouter(tags=["query"])

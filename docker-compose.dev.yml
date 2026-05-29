@@ -34,14 +34,14 @@ services:
   orchestration-api:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: docker/backend.Dockerfile
     container_name: ssi-orchestration-api-dev
     restart: unless-stopped
     env_file:
       - .env.docker
     environment:
-      PYTHONPATH: /opt/airflow/src
-      STOCK_ETL_ENV_FILE: /opt/airflow/.env.docker
+      PYTHONPATH: /app/backend
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       FINANCIAL_REPORTS_QDRANT_URL: ${FINANCIAL_REPORTS_QDRANT_URL}
@@ -52,8 +52,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./:/opt/airflow
-    entrypoint: ["/bin/bash", "-lc", "uvicorn stock_etl.orchestration.orchestration_api:app --host 0.0.0.0 --port 8001"]
+      - ./backend:/app/backend
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001"]
     ports:
       - "8001:8001"
 

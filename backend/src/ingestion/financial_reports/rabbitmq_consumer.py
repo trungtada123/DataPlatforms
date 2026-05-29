@@ -8,9 +8,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, cast
 
-from config.base import load_environment
-from utils.logger import get_logger
-from utils.metrics import record_ingestion_document
+from src.config.base import load_environment
+from src.utils.logger import get_logger
+from src.utils.metrics import record_ingestion_document
 
 from .landing_ai import ocr_pdf
 
@@ -60,6 +60,68 @@ class FinancialIngestMessage:
             pdf_path=pdf_path.strip() if isinstance(pdf_path, str) else None,
             minio_object_key=minio_object_key.strip() if isinstance(minio_object_key, str) else None,
         )
+
+
+def normalize_doc_payload(raw: dict[str, Any]) -> dict[str, Any] | None:
+    for key in REQUIRED_FIELDS:
+        value = raw.get(key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+    try:
+        fiscal_year = int(raw["fiscal_year"])
+    except (TypeError, ValueError):
+        return None
+    payload: dict[str, Any] = {"doc_id": str(raw["doc_id"]).strip(), "ticker": str(raw["ticker"]).strip().upper(), "period": str(raw["period"]).strip(), "fiscal_year": fiscal_year, "source": str(raw["source"]).strip()}
+    pdf_path = raw.get("pdf_path"); minio_object_key = raw.get("minio_object_key")
+    if isinstance(pdf_path, str) and pdf_path.strip(): payload["pdf_path"] = pdf_path.strip()
+    if isinstance(minio_object_key, str) and minio_object_key.strip(): payload["minio_object_key"] = minio_object_key.strip()
+    return payload if payload.get("pdf_path") or payload.get("minio_object_key") else None
+
+def load_pending_docs_from_env() -> list[dict[str, Any]]:
+    load_environment(); raw_json = os.getenv("FINANCIAL_INGEST_PENDING_DOCS_JSON", "").strip()
+    if not raw_json: return []
+    payload = json.loads(raw_json); docs = payload.get("docs", []) if isinstance(payload, dict) else payload
+    if not isinstance(docs, list): return []
+    out: list[dict[str, Any]] = []
+    for item in docs:
+        if isinstance(item, dict):
+            normalized = normalize_doc_payload(item)
+            if normalized: out.append(normalized)
+    return out
+
+def list_pending_docs_from_env(*, batch_limit: int | None = None) -> list[dict[str, Any]]:
+    limit = batch_limit if batch_limit is not None else int(os.getenv("FINANCIAL_INGEST_BATCH_LIMIT", "50"))
+    if limit <= 0: limit = 50
+    return load_pending_docs_from_env()[:limit]
+
+def publish_docs_to_rabbitmq(docs: list[dict[str, Any]]) -> dict[str, Any]:
+    load_environment(); queue_name = os.getenv("FINANCIAL_INGEST_QUEUE", "financial_ingest_jobs")
+    if not docs: return {"queue_name": queue_name, "attempted": 0, "published": 0, "skipped": True}
+    import pika
+    credentials = pika.PlainCredentials(os.getenv("RABBITMQ_DEFAULT_USER", "guest"), os.getenv("RABBITMQ_DEFAULT_PASS", "guest"))
+    parameters = pika.ConnectionParameters(host=os.getenv("RABBITMQ_HOST", "rabbitmq"), port=int(os.getenv("RABBITMQ_PORT", "5672")), virtual_host=os.getenv("RABBITMQ_DEFAULT_VHOST", "/"), credentials=credentials, heartbeat=30)
+    connection = pika.BlockingConnection(parameters); channel = connection.channel(); channel.queue_declare(queue=queue_name, durable=True); published = 0
+    try:
+        for item in docs:
+            channel.basic_publish(exchange="", routing_key=queue_name, body=json.dumps(item, ensure_ascii=False), properties=pika.BasicProperties(content_type="application/json", delivery_mode=2)); published += 1
+    finally:
+        if connection.is_open: connection.close()
+    return {"queue_name": queue_name, "attempted": len(docs), "published": published, "skipped": False}
+
+def check_financial_ingest_queue_status(report: dict[str, Any]) -> dict[str, Any]:
+    load_environment(); enable_check = os.getenv("FINANCIAL_INGEST_ENABLE_QUEUE_CHECK", "true").strip().lower()
+    if enable_check not in {"1", "true", "yes", "on"}: return {"enabled": False, "message_count": None, "consumer_count": None}
+    if report.get("published", 0) <= 0: return {"enabled": True, "message_count": 0, "consumer_count": None}
+    import pika
+    queue_name = str(report.get("queue_name") or os.getenv("FINANCIAL_INGEST_QUEUE", "financial_ingest_jobs"))
+    credentials = pika.PlainCredentials(os.getenv("RABBITMQ_DEFAULT_USER", "guest"), os.getenv("RABBITMQ_DEFAULT_PASS", "guest"))
+    parameters = pika.ConnectionParameters(host=os.getenv("RABBITMQ_HOST", "rabbitmq"), port=int(os.getenv("RABBITMQ_PORT", "5672")), virtual_host=os.getenv("RABBITMQ_DEFAULT_VHOST", "/"), credentials=credentials, heartbeat=30)
+    connection = pika.BlockingConnection(parameters); channel = connection.channel()
+    try:
+        queue = channel.queue_declare(queue=queue_name, passive=True)
+        return {"enabled": True, "queue_name": queue_name, "message_count": int(queue.method.message_count), "consumer_count": int(queue.method.consumer_count)}
+    finally:
+        if connection.is_open: connection.close()
 
 
 class FinancialIngestConsumer:

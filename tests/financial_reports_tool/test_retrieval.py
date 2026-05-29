@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from stock_etl.financial_reports_tool.runtime.contracts import ReportCandidate
-from stock_etl.financial_reports_tool.runtime.retrieval import (
+from src.agents.financial_agent.contracts import ReportCandidate
+from src.agents.financial_agent.retrieval import (
     assemble_contexts,
     build_retrieval_queries,
     detect_focus,
@@ -114,3 +114,4 @@ class FinancialReportsRetrievalTests(TestCase):
         self.assertEqual(strip_row_prefix("Tong tai san"), "tong tai san")
         self.assertEqual(strip_row_prefix("1 Tong tai san"), "tong tai san")
         self.assertEqual(strip_row_prefix("a) Tong tai san"), "tong tai san")
+

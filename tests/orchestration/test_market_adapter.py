@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
-from stock_etl.orchestration.market_adapter import MarketToolAdapter
-from stock_etl.orchestration.trace import TraceCollector
+from src.schemas.orchestration import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
+from src.orchestration.nodes.tools import MarketToolAdapter
+from src.schemas.orchestration import TraceCollector
 
 
 class MarketAdapterTests(TestCase):
@@ -56,7 +56,7 @@ class MarketAdapterTests(TestCase):
             ),
         )
 
-        with patch("stock_etl.orchestration.market_adapter.GeminiSQLAssistant") as assistant_cls:
+        with patch("src.orchestration.nodes.tools.GeminiSQLAssistant") as assistant_cls:
             assistant_cls.return_value.ask.return_value = {
                 "question": request.query,
                 "sql": "SELECT ticker, flag_above_ma50 FROM vw_daily_stock_llm LIMIT 1",
@@ -71,3 +71,4 @@ class MarketAdapterTests(TestCase):
         self.assertEqual(result.tool_name, ToolName.MARKET)
         self.assertEqual(result.structured_data["row_count"], 1)
         self.assertEqual(result.evidence[0]["kind"], "sql")
+

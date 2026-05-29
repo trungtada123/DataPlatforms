@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from agents.market_agent.nl2sql import GeminiSQLAssistant
-from schemas.api import AskRequest, AskResponse
+from src.agents.market_agent.nl2sql import GeminiSQLAssistant
+from src.schemas.api import AskRequest, AskResponse
 
 
 router = APIRouter(tags=["legacy"])

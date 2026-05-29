@@ -5,10 +5,10 @@ from __future__ import annotations
 from unittest import TestCase
 from unittest.mock import patch
 
-from stock_etl.financial_reports_tool.schemas import FinancialReportsContext, FinancialReportsHit, FinancialReportsToolResponse
-from stock_etl.orchestration.contracts import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
-from stock_etl.orchestration.reports_adapter import FinancialReportsToolAdapter
-from stock_etl.orchestration.trace import TraceCollector
+from src.schemas.api import FinancialReportsContext, FinancialReportsHit, FinancialReportsToolResponse
+from src.schemas.orchestration import IntentPlan, ToolExecutionRequest, ToolExecutionStatus, ToolName
+from src.orchestration.nodes.tools import FinancialReportsToolAdapter
+from src.schemas.orchestration import TraceCollector
 
 
 class ReportsAdapterTests(TestCase):
@@ -67,7 +67,7 @@ class ReportsAdapterTests(TestCase):
             raw_response={"synthesis_model": "groq-test"},
         )
 
-        with patch("stock_etl.orchestration.reports_adapter.FinancialReportsQueryService") as service_cls:
+        with patch("src.orchestration.nodes.tools.FinancialReportsQueryService") as service_cls:
             service_cls.return_value.ask.return_value = fake_response
             result = adapter.run(request, trace_collector=TraceCollector("trace-reports"))
 
@@ -75,3 +75,4 @@ class ReportsAdapterTests(TestCase):
         self.assertEqual(result.tool_name, ToolName.FINANCIAL_REPORTS)
         self.assertEqual(result.structured_data["filters"]["ticker"], "FPT")
         self.assertEqual(result.evidence[0]["kind"], "report_context")
+

@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest import TestCase
 
-from stock_etl.news_tool.config import NewsToolSettings
-from stock_etl.news_tool.crawler import Crawl4aiNewsCrawler
+from src.config.news import NewsToolSettings
+from src.agents.news_agent.crawler import Crawl4aiNewsCrawler
 
 
 class Crawl4aiNewsCrawlerTests(TestCase):
@@ -67,3 +67,4 @@ Ngân hàng cũng chia sẻ kế hoạch lợi nhuận và tăng vốn điều l
         self.assertNotIn("Kênh thông tin kinh tế", cleaned_text)
         self.assertNotIn("Đọc nhanh", cleaned_text)
         self.assertNotIn("Tin liên quan", cleaned_text)
+

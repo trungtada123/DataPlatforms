@@ -1,6 +1,6 @@
 FROM apache/airflow:2.10.4-python3.11
 
-ENV PYTHONPATH=/opt/airflow/src
+ENV PYTHONPATH=/opt/airflow/backend
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 USER airflow

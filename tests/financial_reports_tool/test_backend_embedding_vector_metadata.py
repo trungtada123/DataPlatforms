@@ -8,11 +8,11 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from ingestion.financial_reports.chunker import Chunk
-from ingestion.financial_reports.embedder import EmbeddedChunk, embed_chunks
-from ingestion.financial_reports.markdown_parser import parse_landingai_output
-from ingestion.financial_reports.metadata_storage import save_document_metadata, save_parsed_markdown
-from ingestion.financial_reports.vector_writer import write_chunks
+from src.ingestion.financial_reports.chunker import Chunk
+from src.ingestion.financial_reports.embedder import EmbeddedChunk, embed_chunks
+from src.ingestion.financial_reports.markdown_parser import parse_landingai_output
+from src.ingestion.financial_reports.metadata_storage import save_document_metadata, save_parsed_markdown
+from src.ingestion.financial_reports.vector_writer import write_chunks
 
 
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "landingai_output_mock.json"
@@ -143,13 +143,14 @@ class BackendEmbeddingVectorMetadataTests(TestCase):
                 "FINANCIAL_REPORTS_MINIO_PREFIX": "parsed",
             },
             clear=False,
-        ), patch("ingestion.financial_reports.metadata_storage.get_minio_client", return_value=mock_client), patch(
-            "ingestion.financial_reports.metadata_storage.ensure_bucket"
+        ), patch("src.ingestion.financial_reports.metadata_storage.get_minio_client", return_value=mock_client), patch(
+            "src.ingestion.financial_reports.metadata_storage.ensure_bucket"
         ) as ensure_bucket_mock, patch(
-            "ingestion.financial_reports.metadata_storage.upload_bytes"
+            "src.ingestion.financial_reports.metadata_storage.upload_bytes"
         ) as upload_bytes_mock:
             result = save_parsed_markdown(parsed, prefer_minio=True)
 
         self.assertEqual(result.storage_backend, "minio")
         ensure_bucket_mock.assert_called_once()
         upload_bytes_mock.assert_called_once()
+

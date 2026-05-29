@@ -5,10 +5,10 @@ from __future__ import annotations
 from unittest import TestCase
 from unittest.mock import patch
 
-from orchestration.state import build_initial_state
-from orchestration.nodes.classifier import classify
-from orchestration.nodes.router import route
-from stock_etl.orchestration.contracts import IntentPlan, ToolName
+from src.orchestration.state import build_initial_state
+from src.orchestration.nodes.classifier import classify
+from src.orchestration.nodes.router import route
+from src.schemas.orchestration import IntentPlan, ToolName
 
 
 class BackendOrchestrationNodesTests(TestCase):
@@ -31,7 +31,7 @@ class BackendOrchestrationNodesTests(TestCase):
             confidence=0.85,
         )
 
-        with patch("orchestration.nodes.classifier.IntentClassifier") as classifier_cls:
+        with patch("src.orchestration.nodes.classifier.IntentClassifier") as classifier_cls:
             classifier_cls.return_value.classify.return_value = fake_plan
             update = classify(state)
 
@@ -168,3 +168,4 @@ class BackendOrchestrationNodesTests(TestCase):
         self.assertIn("missing_intent_plan", update["errors"])
         self.assertEqual(update["trace"][-1]["step"], "router")
         self.assertEqual(update["trace"][-1]["status"], "error")
+

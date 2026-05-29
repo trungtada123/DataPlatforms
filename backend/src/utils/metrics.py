@@ -6,7 +6,7 @@ import os
 from typing import Any
 from urllib.parse import quote
 
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 
 
 LOGGER = get_logger(__name__)

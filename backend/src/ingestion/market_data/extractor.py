@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any
 
-from config import Settings, get_settings
+from src.config import Settings, get_settings
 
 from .ssi_client import SSIClient
 from .transformer import chunk_date_range, normalize_security_details

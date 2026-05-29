@@ -6,12 +6,12 @@ import json
 from unittest import TestCase
 from unittest.mock import patch
 
-from orchestration.nodes.merger import merge
-from orchestration.nodes.synthesizer import synthesize
-from orchestration.nodes.tools import run_market_agent, run_news_agent
-from orchestration.state import build_initial_state
-from stock_etl.orchestration.context_merger import MergedContext
-from stock_etl.orchestration.contracts import (
+from src.orchestration.nodes.merger import merge
+from src.orchestration.nodes.synthesizer import synthesize
+from src.orchestration.nodes.tools import run_market_agent, run_news_agent
+from src.orchestration.state import build_initial_state
+from src.orchestration.nodes.merger import MergedContext
+from src.schemas.orchestration import (
     IntentPlan,
     ToolExecutionResult,
     ToolExecutionStatus,
@@ -29,7 +29,7 @@ class BackendToolNodesTests(TestCase):
         status: ToolExecutionStatus = ToolExecutionStatus.SUCCESS,
         summary: str = "ok",
     ):
-        from schemas.orchestration import AgentResult
+        from src.schemas.orchestration import AgentResult
 
         query = "Gia ACB"
         return AgentResult(
@@ -72,7 +72,7 @@ class BackendToolNodesTests(TestCase):
         state["selected_tools"] = ["market"]
 
         fake_result = self._agent_result(ToolName.MARKET, summary="gia ACB la 25.1")
-        with patch("orchestration.nodes.tools.market_answer", return_value=fake_result):
+        with patch("src.orchestration.nodes.tools.market_answer", return_value=fake_result):
             update = run_market_agent(state)
 
         self.assertIsNotNone(update["market_result"])
@@ -81,11 +81,29 @@ class BackendToolNodesTests(TestCase):
         self.assertEqual(update["trace"][-1]["status"], "ok")
         self.assertIn("agent_runs", update["metadata"])
 
+    def test_run_market_agent_uses_planned_tool_query(self) -> None:
+        state = build_initial_state("Gia hien tai va tin tuc HPG")
+        state["selected_tools"] = ["market", "news"]
+        state["metadata"]["intent_plan"] = {
+            "tool_queries": {
+                "market": "gia hien tai cua HPG",
+                "news": "recent news about HPG",
+            },
+            "normalized_query": state["query"],
+        }
+
+        fake_result = self._agent_result(ToolName.MARKET, summary="market ok")
+        with patch("src.orchestration.nodes.tools.market_answer", return_value=fake_result) as market_mock:
+            update = run_market_agent(state)
+
+        self.assertIsNotNone(update["market_result"])
+        market_mock.assert_called_once_with("gia hien tai cua HPG")
+
     def test_run_market_agent_handles_exception(self) -> None:
         state = build_initial_state("Gia ACB")
         state["selected_tools"] = ["market"]
 
-        with patch("orchestration.nodes.tools.market_answer", side_effect=RuntimeError("boom")):
+        with patch("src.orchestration.nodes.tools.market_answer", side_effect=RuntimeError("boom")):
             update = run_market_agent(state)
 
         self.assertIsNone(update["market_result"])
@@ -103,7 +121,7 @@ class BackendToolNodesTests(TestCase):
         }
 
         fake_result = self._agent_result(ToolName.NEWS, summary="news ok")
-        with patch("orchestration.nodes.tools.news_answer", return_value=fake_result) as news_mock:
+        with patch("src.orchestration.nodes.tools.news_answer", return_value=fake_result) as news_mock:
             update = run_news_agent(state)
 
         self.assertIsNotNone(update["news_result"])
@@ -161,7 +179,7 @@ class BackendToolNodesTests(TestCase):
         )
         state["metadata"]["merged_context"] = merged.model_dump(mode="json")
 
-        with patch("orchestration.nodes.synthesizer.FinalSynthesizer") as synthesizer_cls:
+        with patch("src.orchestration.nodes.synthesizer.FinalSynthesizer") as synthesizer_cls:
             synthesizer_cls.return_value.synthesize.return_value.answer = "Final merged answer"
             synthesizer_cls.return_value.synthesize.return_value.model_name = "stub"
             synthesizer_cls.return_value.synthesize.return_value.used_fallback = True
