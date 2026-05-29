@@ -13,9 +13,9 @@ import requests
 
 from config.base import PROJECT_ROOT
 from config.settings import get_settings
-from stock_etl.orchestration.contracts import ToolName
-from stock_etl.orchestration.intent_classifier import IntentClassifier
-from stock_etl.orchestration.runtime_readiness import (
+from orchestration.contracts import ToolName
+from orchestration.intent_classifier import IntentClassifier
+from orchestration.runtime_readiness import (
     READINESS_NO_DATA,
     READINESS_SERVICE_UNREACHABLE,
     ToolRuntimeReadiness,
@@ -77,10 +77,10 @@ def run_news_component_check() -> dict[str, Any]:
         Dict mô tả kết quả component-level của news.
     """
 
-    from stock_etl.news_tool.config import get_news_tool_settings
-    from stock_etl.news_tool.crawler import Crawl4aiNewsCrawler
-    from stock_etl.news_tool.search import DuckDuckGoNewsSearch
-    from stock_etl.news_tool.summarizer import NewsSummarizer
+    from agents.news_agent.config import get_news_tool_settings
+    from agents.news_agent.crawler import Crawl4aiNewsCrawler
+    from agents.news_agent.search import DuckDuckGoNewsSearch
+    from agents.news_agent.summarizer import NewsSummarizer
 
     question = "Tin gần đây của FPT có gì đáng chú ý?"
     settings = get_news_tool_settings()
@@ -132,7 +132,7 @@ def build_query_client(mode: str, base_url: str | None):
         return query_http, (lambda: None)
 
     from fastapi.testclient import TestClient
-    from stock_etl.orchestration.orchestration_api import app
+    from orchestration.orchestration_api import app
 
     test_client = TestClient(app)
     test_client.__enter__()

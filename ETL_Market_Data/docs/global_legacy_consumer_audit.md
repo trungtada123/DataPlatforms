@@ -45,11 +45,11 @@ Table (unique matched lines):
 ## Runtime Consumers
 True runtime consumers outside `src/stock_etl`:
 
-- `dags/ssi_bootstrap_history.py` (`from stock_etl.pipeline import bootstrap_history`) -> `DAG_NEEDS_CANONICAL_UPDATE`
-- `dags/ssi_intraday_session.py` (`refresh_intraday_session`, `finalize_end_of_day`) -> `DAG_NEEDS_CANONICAL_UPDATE`
-- `scripts/audit_raw_anomalies.py` (`from stock_etl.database import get_engine`) -> `SCRIPT_NEEDS_CANONICAL_UPDATE`
-- `scripts/smoke_test_orchestration.py` (`stock_etl.orchestration.*`, `stock_etl.news_tool.*`) -> `SCRIPT_NEEDS_CANONICAL_UPDATE`
-- `docker-compose.dev.yml` entrypoint (`uvicorn stock_etl.orchestration.orchestration_api:app`) -> `RUNTIME_CONSUMER`
+- `dags/ssi_bootstrap_history.py` now uses canonical `ingestion.market_data.bootstrap_history` (resolved in Wave 7B).
+- `dags/ssi_intraday_session.py` now uses canonical `ingestion.market_data.refresh_intraday` and `ingestion.market_data.finalize_eod` (resolved in Wave 7B).
+- `scripts/audit_raw_anomalies.py` now uses canonical `core.database.get_engine` (resolved in Wave 7B).
+- `scripts/smoke_test_orchestration.py` now uses canonical `orchestration.*` and `agents.news_agent.*` imports (resolved in Wave 7B).
+- `docker-compose.dev.yml` now uses canonical entrypoint `uvicorn main:app` and `PYTHONPATH=/opt/airflow/backend/src` (resolved in Wave 7B).
 
 ## Tests Compatibility Consumers
 Compatibility tests intentionally importing legacy paths:
@@ -60,12 +60,11 @@ Compatibility tests intentionally importing legacy paths:
 
 | file | reference | classification | blocker_to_delete_stock_etl | recommended action |
 |---|---|---|---|---|
-| `dags/ssi_bootstrap_history.py` | `stock_etl.pipeline.bootstrap_history` | `DAG_NEEDS_CANONICAL_UPDATE` | yes | Switch to canonical `ingestion.market_data` facade with equivalent signature. |
-| `dags/ssi_intraday_session.py` | `stock_etl.pipeline.refresh_intraday_session` | `DAG_NEEDS_CANONICAL_UPDATE` | yes | Switch to canonical `ingestion.market_data` facade with equivalent signature. |
-| `dags/ssi_intraday_session.py` | `stock_etl.pipeline.finalize_end_of_day` | `DAG_NEEDS_CANONICAL_UPDATE` | yes | Switch to canonical `ingestion.market_data` facade with equivalent signature. |
-| `scripts/audit_raw_anomalies.py` | `stock_etl.database.get_engine` | `SCRIPT_NEEDS_CANONICAL_UPDATE` | yes | Switch import to canonical `core.database`. |
-| `scripts/smoke_test_orchestration.py` | `stock_etl.orchestration.*`, `stock_etl.news_tool.*` | `SCRIPT_NEEDS_CANONICAL_UPDATE` | yes | Switch to canonical `orchestration.*`, `agents.news_agent.*`, and canonical app module. |
-| `docker-compose.dev.yml` | `uvicorn stock_etl.orchestration.orchestration_api:app` | `RUNTIME_CONSUMER` | yes | Point entrypoint to canonical backend orchestration API. |
+| `dags/ssi_bootstrap_history.py` | canonical `ingestion.market_data.bootstrap_history` | `SAFE_TO_REMOVE_LATER` | no | Keep as-is; verify in Wave 7C regression run. |
+| `dags/ssi_intraday_session.py` | canonical `ingestion.market_data.refresh_intraday/finalize_eod` | `SAFE_TO_REMOVE_LATER` | no | Keep as-is; verify in Wave 7C regression run. |
+| `scripts/audit_raw_anomalies.py` | canonical `core.database.get_engine` | `SAFE_TO_REMOVE_LATER` | no | Keep as-is; no further shim dependency. |
+| `scripts/smoke_test_orchestration.py` | canonical `orchestration.*` + `agents.news_agent.*` | `SAFE_TO_REMOVE_LATER` | no | Keep as-is; no further shim dependency. |
+| `docker-compose.dev.yml` | canonical `main:app` + backend-only PYTHONPATH | `SAFE_TO_REMOVE_LATER` | no | Keep as-is; validate dev compose startup in Wave 7D. |
 
 ## Docs Consumers
 Docs requiring operational cleanup (`DOCS_NEEDS_UPDATE`):
@@ -106,7 +105,7 @@ Current assumptions:
   - Backend/worker: `PYTHONPATH=/app/backend/src` (canonical-only).
   - Financial workers: `PYTHONPATH=/app/backend/src:/app/src` (still includes legacy path).
   - Airflow images/services: include `/opt/airflow/src` and `/opt/airflow/backend/src`.
-  - Dev compose entrypoint still runs legacy `stock_etl.orchestration.orchestration_api:app`.
+  - Dev compose orchestration service now runs canonical `main:app` with `PYTHONPATH=/opt/airflow/backend/src`.
 
 Recommended future canonical PYTHONPATH:
 - Backend/worker/runtime target: `backend/src` only.
@@ -114,20 +113,19 @@ Recommended future canonical PYTHONPATH:
 
 ## Deletion Readiness
 - `src/stock_etl` deletion readiness: **NOT READY**
-  - Blockers: runtime scripts/DAGs/dev compose + compatibility tests + shim implementation itself.
+  - Blockers: compatibility tests + shim implementation itself (runtime scripts/DAGs/dev compose blockers removed in Wave 7B).
 - `agents._legacy` deletion readiness: **NOT READY**
   - Functionally unused in-repo, but held for staged compatibility policy and final cutover sequencing.
 
 ## Recommended Cleanup Waves
-1. `Wave 7B`: scripts/DAG canonical import cleanup
-2. `Wave 7C`: tests compatibility split/update
-3. `Wave 7D`: docs/PYTHONPATH cleanup
-4. `Wave 8`: remove `agents._legacy` only after zero verified usage
-5. `Wave 9`: remove `src/stock_etl` only when zero runtime/test/script/DAG blockers remain
+1. `Wave 7C`: tests compatibility split/update
+2. `Wave 7D`: docs/PYTHONPATH cleanup
+3. `Wave 8`: remove `agents._legacy` only after zero verified usage
+4. `Wave 9`: remove `src/stock_etl` only when zero runtime/test/script/DAG blockers remain
 
 ## Exact Next Prompt
 ```text
-You are executing Wave 7B: scripts/DAG canonical import cleanup (no business-logic changes).
+You are executing Wave 7C: compatibility tests split/update for legacy-shim retirement readiness.
 
 Repository:
 https://github.com/trungtada123/DataPlatforms
@@ -139,7 +137,7 @@ Scope:
 ETL_Market_Data only.
 
 Goal:
-Remove runtime script/DAG/dev-compose dependencies on stock_etl by switching to canonical backend/src modules while preserving behavior.
+Reduce legacy import dependence in tests while preserving at least one explicit compatibility suite for src/stock_etl shims.
 
 Critical constraints:
 - Do NOT modify business logic.
@@ -158,23 +156,25 @@ Tasks:
      - python -m compileall backend/src src dags scripts
      - PYTHONPATH="backend/src;src" python -m pytest -q tests
      - docker compose config
-2) Update script imports to canonical modules:
-   - scripts/audit_raw_anomalies.py
-   - scripts/smoke_test_orchestration.py
-3) Update DAG imports to canonical ingestion facade:
-   - dags/ssi_bootstrap_history.py
-   - dags/ssi_intraday_session.py
-4) Update docker-compose.dev.yml entrypoint to canonical orchestration app.
-5) Keep compatibility tests untouched in this wave.
-6) Re-run verification + targeted smoke checks.
-7) Run gitnexus_detect_changes and confirm only expected runtime wiring files changed.
+2) Inventory tests importing stock_etl.* and classify:
+   - KEEP_COMPAT_SUITE
+   - SAFE_TO_CANONICALIZE
+   - DO_NOT_TOUCH_YET
+3) Convert low-risk tests to canonical backend/src imports where behavior is identical.
+4) Keep at least one explicit compatibility suite covering:
+   - stock_etl.pipeline
+   - stock_etl.orchestration
+   - stock_etl.news_tool
+   - stock_etl.financial_reports_tool
+5) Re-run verification + targeted compatibility tests.
+6) Run gitnexus_detect_changes and confirm only tests/docs changed.
 8) Commit:
-   fix: wave7b canonicalize script and dag imports
+   test: wave7c split compatibility coverage from canonical tests
 9) Push to origin/test1.
 
 Final response:
 - changed files
-- legacy runtime blocker delta
+- legacy test blocker delta
 - verification results
-- remaining blockers before Wave 7C
+- remaining blockers before Wave 7D
 ```

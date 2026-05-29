@@ -40,7 +40,7 @@ services:
     env_file:
       - .env.docker
     environment:
-      PYTHONPATH: /opt/airflow/src
+      PYTHONPATH: /opt/airflow/backend/src
       STOCK_ETL_ENV_FILE: /opt/airflow/.env.docker
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -53,7 +53,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./:/opt/airflow
-    entrypoint: ["/bin/bash", "-lc", "uvicorn stock_etl.orchestration.orchestration_api:app --host 0.0.0.0 --port 8001"]
+    entrypoint: ["/bin/bash", "-lc", "uvicorn main:app --host 0.0.0.0 --port 8001"]
     ports:
       - "8001:8001"
 

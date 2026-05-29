@@ -30,9 +30,9 @@ def build_intraday_dag(dag_id: str, schedule: str) -> None:
     def _dag() -> None:
         @task
         def run_refresh() -> dict:
-            from stock_etl.pipeline import refresh_intraday_session
+            from ingestion.market_data import refresh_intraday
 
-            return refresh_intraday_session()
+            return refresh_intraday()
 
         run_refresh()
 
@@ -57,9 +57,9 @@ def ssi_intraday_session_close() -> None:
 
     @task
     def run_finalize() -> dict:
-        from stock_etl.pipeline import finalize_end_of_day
+        from ingestion.market_data import finalize_eod
 
-        return finalize_end_of_day()
+        return finalize_eod()
 
     run_finalize()
 

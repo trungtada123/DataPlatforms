@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from stock_etl.database import get_engine
+from core.database import get_engine
 from sqlalchemy import text
 
 

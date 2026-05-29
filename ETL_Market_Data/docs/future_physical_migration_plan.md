@@ -346,3 +346,23 @@ It is planning-only and does not authorize implementation in the current phase.
   - Wave 7D: docs + PYTHONPATH cleanup
   - Wave 8: remove `agents._legacy` if confirmed unused
   - Wave 9: remove `src/stock_etl` only after zero blockers across runtime/tests/scripts/DAGs
+
+## Wave 7B Status Update (Scripts/DAG/Dev-Compose Runtime Rewire)
+- Wave 7B completed on `test1` with import/entrypoint rewiring only (no business logic changes).
+- Runtime blockers removed from:
+  - `dags/ssi_bootstrap_history.py` -> canonical `ingestion.market_data.bootstrap_history`
+  - `dags/ssi_intraday_session.py` -> canonical `ingestion.market_data.refresh_intraday` + `ingestion.market_data.finalize_eod`
+  - `scripts/audit_raw_anomalies.py` -> canonical `core.database.get_engine`
+  - `scripts/smoke_test_orchestration.py` -> canonical `orchestration.*` + `agents.news_agent.*`
+  - `docker-compose.dev.yml` -> canonical `uvicorn main:app` and `PYTHONPATH=/opt/airflow/backend/src`
+- Post-change verification:
+  - `python scripts/check_no_tracked_secrets.py`: PASS
+  - `python -m compileall backend/src src dags scripts`: PASS
+  - `PYTHONPATH="backend/src;src" python -m pytest -q tests`: PASS (`196 passed`)
+  - `docker compose config`: PASS (warning-only for unset local env vars)
+- Remaining blockers are now primarily compatibility tests and legacy shims/docs, not runtime scripts/DAG/dev-compose wiring.
+- Recommended next cleanup sequence:
+  - Wave 7C: compatibility test split/update
+  - Wave 7D: docs + PYTHONPATH cleanup
+  - Wave 8: remove `agents._legacy` if confirmed unused
+  - Wave 9: remove `src/stock_etl` only after zero blockers across runtime/tests/scripts/DAGs
