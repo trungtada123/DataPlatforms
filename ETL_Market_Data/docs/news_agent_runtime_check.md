@@ -100,3 +100,30 @@ Update after fix:
 Remaining limitations:
 - Live web result quality still depends on DuckDuckGo index freshness and what source sites publish at query time.
 - For some runs, latest crawled set may contain mostly neutral corporate articles, so response can still be "closest relevant latest" with explicit "no clear negative" note.
+
+## Chromium Docker Stability Fix
+- Observed issue:
+  - Chromium executable existed in Docker (`/ms-playwright/chromium-1223/...`) but browser could intermittently crash during launch with SIGSEGV and `BrowserType.launch: Target page, context or browser has been closed`.
+- Root cause:
+  - Backend container shared memory was too small by default (`/dev/shm` around 64MB), which is a common cause of Chromium instability under crawl workloads.
+  - Crawl4AI launch path also injects a broad set of Chromium flags; keeping runtime flags minimal and consistent improves stability.
+- Applied fix:
+  - Added `shm_size: "1gb"` to `backend` service in `docker-compose.yml`.
+  - Explicitly set `PLAYWRIGHT_BROWSERS_PATH=/ms-playwright` in backend compose environment for deterministic browser path resolution.
+  - Hardened crawler browser config with stable extra args:
+    - `--no-sandbox`
+    - `--disable-gpu`
+    - `--enable-unsafe-swiftshader`
+  - Extended `scripts/check_news_crawler_runtime.py` to classify runtime failures:
+    - `MISSING_BROWSER`
+    - `BROWSER_LAUNCH_CRASH`
+    - `NETWORK_BLOCKED`
+    - `SITE_BLOCKED`
+    - `SUCCESS`
+  - Script now validates:
+    1) chromium executable presence
+    2) direct Playwright launch
+    3) Crawl4AI crawl on `https://example.com`
+    4) optional news-domain crawl smoke (`https://vnexpress.net`)
+- Remaining limitations:
+  - Live crawl still depends on external site/network behavior. If news domains block crawling, status should be `SITE_BLOCKED`/`NETWORK_BLOCKED` instead of browser-launch crash.

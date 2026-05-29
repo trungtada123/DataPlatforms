@@ -69,7 +69,11 @@ class Crawl4aiNewsCrawler:
 
     async def _crawl_hits_async(self, hits: list[NewsSearchHit]) -> list[NewsCrawledArticle]:
         AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig = self._load_crawl4ai()
-        browser_config = BrowserConfig(headless=True, verbose=False)
+        browser_config = BrowserConfig(
+            headless=True,
+            verbose=False,
+            extra_args=self._build_browser_extra_args(),
+        )
         run_config = CrawlerRunConfig(
             cache_mode=CacheMode.BYPASS,
             word_count_threshold=self.settings.crawl_word_count_threshold,
@@ -144,6 +148,18 @@ class Crawl4aiNewsCrawler:
         except ImportError as exc:  # pragma: no cover - phụ thuộc runtime ngoài.
             raise RuntimeError("crawl4ai is required for news crawling. Please install `crawl4ai`.") from exc
         return AsyncWebCrawler, BrowserConfig, CacheMode, CrawlerRunConfig
+
+    @staticmethod
+    def _build_browser_extra_args() -> list[str]:
+        """Build stable extra args for Chromium in container/runtime."""
+
+        # Keep minimal stable flags here. Do not duplicate or override all Crawl4AI defaults.
+        # /dev/shm size is configured in docker-compose (backend shm_size) as primary mitigation.
+        return [
+            "--no-sandbox",
+            "--disable-gpu",
+            "--enable-unsafe-swiftshader",
+        ]
 
     @staticmethod
     def _extract_markdown(result: Any) -> str | None:
