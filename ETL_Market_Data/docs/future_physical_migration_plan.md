@@ -331,3 +331,18 @@ It is planning-only and does not authorize implementation in the current phase.
 - `backend/src/agents/_legacy.py` remains as compatibility helper only and is kept for final legacy cutover wave.
 - `src/stock_etl` shims remain unchanged by design until approved final removal phase.
 - Deep Financial ETL/OCR/Qdrant hardening remains postponed.
+
+## Wave 7A Global Legacy Consumer Audit
+- Baseline on `test1` is green (`196 passed`, compileall pass, secrets check pass, docker compose config pass).
+- Backend runtime status:
+  - `backend/src` has no direct runtime `stock_etl.*` imports.
+  - `backend/src/agents/_legacy.py` remains as compatibility helper candidate for final cutover.
+- `src/stock_etl` deletion status: **not ready**.
+  - Runtime blockers still exist in scripts, DAGs, and dev compose entrypoint.
+  - Compatibility tests still intentionally import `stock_etl.*`.
+- Recommended cleanup sequence:
+  - Wave 7B: scripts/DAG canonical import cleanup
+  - Wave 7C: compatibility test split/update
+  - Wave 7D: docs + PYTHONPATH cleanup
+  - Wave 8: remove `agents._legacy` if confirmed unused
+  - Wave 9: remove `src/stock_etl` only after zero blockers across runtime/tests/scripts/DAGs
