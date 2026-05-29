@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import ast
+import json
+from collections.abc import Mapping
+from typing import Any
+
 from agents._legacy import ensure_legacy_src_on_path
 from schemas.orchestration import AgentResult, IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
 
@@ -10,10 +15,79 @@ ensure_legacy_src_on_path()
 from .service import NewsToolService
 
 
+def normalize_news_tool_query(value: Any, original_query: str | None = None) -> str:
+    """Normalize structured news tool query payload to plain text."""
+
+    fallback = str(original_query or "").strip()
+    parsed = _coerce_news_query_payload(value)
+    if isinstance(parsed, Mapping):
+        text = _build_query_from_mapping(parsed)
+    else:
+        text = str(parsed or "").strip()
+
+    if not text:
+        return fallback
+    return " ".join(text.split())
+
+
+def _coerce_news_query_payload(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return ""
+        if raw.startswith("{") and raw.endswith("}"):
+            try:
+                loaded = json.loads(raw)
+                if isinstance(loaded, Mapping):
+                    return loaded
+            except Exception:
+                pass
+            try:
+                loaded = ast.literal_eval(raw)
+                if isinstance(loaded, Mapping):
+                    return loaded
+            except Exception:
+                pass
+        return raw
+    return str(value or "").strip()
+
+
+def _build_query_from_mapping(payload: Mapping[str, Any]) -> str:
+    def _read_first(*keys: str) -> str:
+        for key in keys:
+            if key not in payload:
+                continue
+            value = payload.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return ""
+
+    base_query = _read_first("query", "question", "text", "keyword", "keywords")
+    ticker = _read_first("ticker", "symbol")
+    time_period = _read_first("time_period", "timeframe", "time_window")
+    tone = _read_first("sentiment", "tone")
+    topic = _read_first("topic", "focus")
+
+    parts: list[str] = []
+    if base_query:
+        parts.append(base_query)
+    if ticker and ticker.lower() not in base_query.lower():
+        parts.append(ticker)
+    for token in (time_period, tone, topic):
+        if token:
+            parts.append(token)
+    return " ".join(parts).strip()
+
+
 def answer(query: str) -> AgentResult:
     """Answer one news query and wrap into canonical AgentResult."""
 
-    normalized_query = query.strip()
+    normalized_query = normalize_news_tool_query(query, original_query=query)
     try:
         payload = NewsToolService().ask(normalized_query)
         status_value = str(payload.status)
@@ -103,4 +177,3 @@ def answer(query: str) -> AgentResult:
             limitations=[str(exc)],
             debug_trace=None,
         )
-

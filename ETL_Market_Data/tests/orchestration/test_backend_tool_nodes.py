@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from orchestration.nodes.merger import merge
 from orchestration.nodes.synthesizer import synthesize
-from orchestration.nodes.tools import run_market_agent
+from orchestration.nodes.tools import run_market_agent, run_news_agent
 from orchestration.state import build_initial_state
 from stock_etl.orchestration.context_merger import MergedContext
 from stock_etl.orchestration.contracts import (
@@ -92,6 +92,26 @@ class BackendToolNodesTests(TestCase):
         self.assertTrue(any(item.startswith("market_agent_error:") for item in update["errors"]))
         self.assertEqual(update["trace"][-1]["step"], "market_agent")
         self.assertEqual(update["trace"][-1]["status"], "error")
+
+    def test_run_news_agent_normalizes_dict_like_tool_query(self) -> None:
+        state = build_initial_state("Có tin tức tiêu cực nào gần đây về FPT không?")
+        state["selected_tools"] = ["news"]
+        state["metadata"]["intent_plan"] = {
+            "tool_queries": {
+                "news": "{'query': 'FPT negative news', 'time_period': 'recent'}",
+            }
+        }
+
+        fake_result = self._agent_result(ToolName.NEWS, summary="news ok")
+        with patch("orchestration.nodes.tools.news_answer", return_value=fake_result) as news_mock:
+            update = run_news_agent(state)
+
+        self.assertIsNotNone(update["news_result"])
+        news_mock.assert_called_once()
+        query_used = news_mock.call_args.args[0]
+        self.assertNotIn("{'query':", query_used)
+        self.assertIn("FPT", query_used)
+        self.assertIn("recent", query_used.lower())
 
     def test_merge_builds_merged_context(self) -> None:
         state = build_initial_state("Gia ACB")
