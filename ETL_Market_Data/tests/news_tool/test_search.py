@@ -99,3 +99,12 @@ class DuckDuckGoNewsSearchTests(TestCase):
 
         self.assertFalse(self.search._is_relevant_hit(misleading_hit, entity_tokens))
         self.assertTrue(self.search._is_relevant_hit(relevant_hit, entity_tokens))
+
+    def test_negative_fpt_query_candidates_include_vietnamese_terms(self) -> None:
+        candidates = self.search._build_query_candidates("Có tin tức tiêu cực nào gần đây về FPT không?")
+        joined = " | ".join(candidates).lower()
+
+        self.assertIn("fpt", joined)
+        self.assertTrue(any("tiêu cực" in item.lower() or "tieu cuc" in item.lower() for item in candidates))
+        self.assertTrue(any("rủi ro" in item.lower() or "rui ro" in item.lower() for item in candidates))
+        self.assertTrue(any("gần đây" in item.lower() or "gan day" in item.lower() for item in candidates))

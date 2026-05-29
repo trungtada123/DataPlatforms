@@ -78,10 +78,12 @@ services:
       dockerfile: docker/backend.Dockerfile
     container_name: ssi-backend
     restart: unless-stopped
+    shm_size: "1gb"
     env_file:
       - .env
     environment:
       PYTHONPATH: /app/backend/src
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
       STOCK_ETL_ENV_FILE: /app/.env
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432

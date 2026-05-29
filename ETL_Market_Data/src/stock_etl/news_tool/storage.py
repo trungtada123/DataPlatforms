@@ -9,19 +9,65 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
-def normalize_url(url: str) -> str:
+TRACKING_QUERY_PREFIXES = (
+    "utm_",
+    "ga_",
+)
+TRACKING_QUERY_KEYS = {
+    "fbclid",
+    "gclid",
+    "dclid",
+    "gbraid",
+    "wbraid",
+    "igshid",
+    "msclkid",
+    "mc_cid",
+    "mc_eid",
+    "ref",
+    "ref_src",
+    "_ga",
+    "_gl",
+}
+
+
+def _is_tracking_query_key(key: str) -> bool:
+    lowered = key.strip().lower()
+    if not lowered:
+        return False
+    if lowered in TRACKING_QUERY_KEYS:
+        return True
+    return any(lowered.startswith(prefix) for prefix in TRACKING_QUERY_PREFIXES)
+
+
+def canonicalize_url(url: str) -> str:
     """Chuẩn hoá URL để dedupe và tạo hash ổn định.
 
     Args:
         url: URL gốc của bài viết.
 
     Returns:
-        URL đã bỏ fragment và sort query string.
+        URL đã bỏ fragment, bỏ tracking query params và sort query string.
     """
 
     parts = urlsplit(url.strip())
-    normalized_query = urlencode(sorted(parse_qsl(parts.query, keep_blank_values=True)))
-    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path, normalized_query, ""))
+    normalized_pairs = []
+    for key, value in parse_qsl(parts.query, keep_blank_values=True):
+        if _is_tracking_query_key(key):
+            continue
+        normalized_pairs.append((key, value))
+
+    normalized_query = urlencode(sorted(normalized_pairs))
+    normalized_path = parts.path or "/"
+    if normalized_path != "/" and normalized_path.endswith("/"):
+        normalized_path = normalized_path.rstrip("/")
+
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), normalized_path, normalized_query, ""))
+
+
+def normalize_url(url: str) -> str:
+    """Backward-compatible alias cho canonicalize_url()."""
+
+    return canonicalize_url(url)
 
 
 def url_hash(url: str) -> str:
