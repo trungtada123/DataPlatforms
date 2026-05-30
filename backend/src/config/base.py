@@ -74,4 +74,3 @@ def get_base_settings() -> BaseSettings:
         project_root=PROJECT_ROOT,
         env_file=env_file,
     )
-

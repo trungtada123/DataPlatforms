@@ -107,6 +107,31 @@ Useful DAG ids:
 - `ssi_intraday_session_close`
 - `financial_ingest_publish_queue`
 
+SSI market ingestion:
+
+- `ssi_intraday_session_main` runs every 15 minutes on weekdays from 09:00 to 15:00 by default and skips outside the Vietnamese market windows 09:00-11:30 and 13:00-15:00.
+- `ssi_intraday_session_close` runs at 15:30 on weekdays by default to finalize EOD daily rows and recompute features.
+- Schedules can be overridden with `SSI_INTRADAY_SCHEDULE` and `SSI_EOD_SCHEDULE`; symbols can be narrowed with `SSI_MARKET_TICKERS`.
+
+Manual market commands:
+
+```powershell
+$env:PYTHONPATH="backend"
+python -m src.market.cli ensure-schema
+python -m src.market.cli bootstrap-history --tickers HPG,FPT,VNM --days 30
+python -m src.market.cli refresh-intraday --tickers HPG,FPT,VNM
+python -m src.market.cli finalize-eod --date today
+python -m src.market.cli validate-latest --ticker HPG
+python -m src.market.cli validate-daily --ticker HPG --days 30
+```
+
+Validation SQL:
+
+```sql
+SELECT * FROM vw_intraday_latest_llm WHERE ticker = 'HPG' LIMIT 5;
+SELECT * FROM vw_daily_stock_llm WHERE ticker = 'HPG' ORDER BY trading_date DESC LIMIT 5;
+```
+
 Example trigger:
 
 ```powershell

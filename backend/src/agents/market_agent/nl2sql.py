@@ -262,10 +262,10 @@ def _fallback_intraday_to_daily_sql(question: str, sql: str) -> tuple[str, str] 
     if "vw_intraday_latest_llm" not in sql.lower():
         return None
 
-    ticker = _extract_symbol_from_question(question)
+    ticker_match = re.search(r"\bticker\s*=\s*'([A-Z]{3,5})'", sql, flags=re.IGNORECASE)
+    ticker = ticker_match.group(1).upper() if ticker_match else None
     if not ticker:
-        ticker_match = re.search(r"\bticker\s*=\s*'([A-Z]{3,5})'", sql, flags=re.IGNORECASE)
-        ticker = ticker_match.group(1).upper() if ticker_match else None
+        ticker = _extract_symbol_from_question(question)
     if not ticker:
         return None
 
