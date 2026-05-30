@@ -1,0 +1,2 @@
+"""Tests cho news tool."""
+

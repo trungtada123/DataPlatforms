@@ -1,0 +1,288 @@
+"""RabbitMQ message schemas for staged financial report ingestion."""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import asdict, dataclass
+from typing import Any, ClassVar
+
+
+FINANCIAL_DOWNLOAD_QUEUE_ENV = "FINANCIAL_DOWNLOAD_QUEUE"
+FINANCIAL_PARSE_QUEUE_ENV = "FINANCIAL_PARSE_QUEUE"
+FINANCIAL_CHUNK_QUEUE_ENV = "FINANCIAL_CHUNK_QUEUE"
+FINANCIAL_EMBEDDING_QUEUE_ENV = "FINANCIAL_EMBEDDING_QUEUE"
+
+DEFAULT_FINANCIAL_DOWNLOAD_QUEUE = "financial_download_jobs"
+DEFAULT_FINANCIAL_PARSE_QUEUE = "financial_parse_jobs"
+DEFAULT_FINANCIAL_CHUNK_QUEUE = "financial_chunk_jobs"
+DEFAULT_FINANCIAL_EMBEDDING_QUEUE = "financial_embedding_jobs"
+
+COMMON_FIELDS = (
+    "doc_id",
+    "ticker",
+    "fiscal_year",
+    "period",
+    "quarter",
+    "report_type",
+    "report_family",
+    "scope",
+    "source",
+    "source_url",
+)
+COMMON_REQUIRED_STRING_FIELDS = (
+    "doc_id",
+    "ticker",
+    "period",
+    "report_type",
+    "report_family",
+    "source",
+    "source_url",
+)
+
+
+def financial_download_queue_name() -> str:
+    """Return the configured download queue name."""
+
+    return os.getenv(FINANCIAL_DOWNLOAD_QUEUE_ENV, DEFAULT_FINANCIAL_DOWNLOAD_QUEUE).strip() or DEFAULT_FINANCIAL_DOWNLOAD_QUEUE
+
+
+def financial_parse_queue_name() -> str:
+    """Return the configured parse queue name."""
+
+    return os.getenv(FINANCIAL_PARSE_QUEUE_ENV, DEFAULT_FINANCIAL_PARSE_QUEUE).strip() or DEFAULT_FINANCIAL_PARSE_QUEUE
+
+
+def financial_chunk_queue_name() -> str:
+    """Return the configured chunk queue name."""
+
+    return os.getenv(FINANCIAL_CHUNK_QUEUE_ENV, DEFAULT_FINANCIAL_CHUNK_QUEUE).strip() or DEFAULT_FINANCIAL_CHUNK_QUEUE
+
+
+def financial_embedding_queue_name() -> str:
+    """Return the configured embedding queue name."""
+
+    return (
+        os.getenv(FINANCIAL_EMBEDDING_QUEUE_ENV, DEFAULT_FINANCIAL_EMBEDDING_QUEUE).strip()
+        or DEFAULT_FINANCIAL_EMBEDDING_QUEUE
+    )
+
+
+def financial_queue_names() -> dict[str, str]:
+    """Return all staged financial ingestion queue names."""
+
+    return {
+        "download": financial_download_queue_name(),
+        "parse": financial_parse_queue_name(),
+        "chunk": financial_chunk_queue_name(),
+        "embedding": financial_embedding_queue_name(),
+    }
+
+
+def _require_keys(payload: dict[str, Any], keys: tuple[str, ...]) -> None:
+    missing = [key for key in keys if key not in payload]
+    if missing:
+        raise ValueError(f"Missing required field(s): {', '.join(missing)}")
+
+
+def _require_string(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    if value is None or not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Field {key} must be a non-empty string.")
+    return value.strip()
+
+
+def _require_int(payload: dict[str, Any], key: str) -> int:
+    value = payload.get(key)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"Field {key} must be an integer.")
+    return value
+
+
+def _optional_int(payload: dict[str, Any], key: str) -> int | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"Field {key} must be an integer or null.")
+    return value
+
+
+def _optional_string(payload: dict[str, Any], key: str) -> str | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"Field {key} must be a string or null.")
+    stripped = value.strip()
+    return stripped or None
+
+
+def _decode_json(raw: str | bytes) -> dict[str, Any]:
+    try:
+        text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        payload = json.loads(text)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid RabbitMQ job JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("RabbitMQ job payload must be a JSON object.")
+    return payload
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialJobBase:
+    """Base payload shared by all financial report ingestion jobs."""
+
+    doc_id: str
+    ticker: str
+    fiscal_year: int
+    period: str
+    quarter: int | None
+    report_type: str
+    report_family: str
+    scope: str | None
+    source: str
+    source_url: str
+
+    queue_name: ClassVar[str] = ""
+    extra_fields: ClassVar[tuple[str, ...]] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize this job to a plain JSON-ready dictionary."""
+
+        return asdict(self)
+
+    def to_json(self) -> str:
+        """Serialize this job as UTF-8 safe JSON text."""
+
+        return json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
+
+    @classmethod
+    def from_json(cls, raw: str | bytes) -> Any:
+        """Deserialize one job from JSON text or bytes."""
+
+        return cls.from_dict(_decode_json(raw))
+
+    @classmethod
+    def _base_kwargs_from_dict(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        _require_keys(payload, COMMON_FIELDS + cls.extra_fields)
+        for key in COMMON_REQUIRED_STRING_FIELDS:
+            _require_string(payload, key)
+
+        return {
+            "doc_id": _require_string(payload, "doc_id"),
+            "ticker": _require_string(payload, "ticker").upper(),
+            "fiscal_year": _require_int(payload, "fiscal_year"),
+            "period": _require_string(payload, "period"),
+            "quarter": _optional_int(payload, "quarter"),
+            "report_type": _require_string(payload, "report_type"),
+            "report_family": _require_string(payload, "report_family"),
+            "scope": _optional_string(payload, "scope"),
+            "source": _require_string(payload, "source"),
+            "source_url": _require_string(payload, "source_url"),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> Any:
+        """Deserialize one job from a dictionary."""
+
+        return cls(**cls._base_kwargs_from_dict(payload))
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialDownloadJob(FinancialJobBase):
+    """Job requesting a worker to download a Vietstock report."""
+
+    queue_name: ClassVar[str] = DEFAULT_FINANCIAL_DOWNLOAD_QUEUE
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialParseJob(FinancialJobBase):
+    """Job requesting a worker to parse a raw report artifact."""
+
+    raw_bucket: str
+    raw_object_key: str
+
+    queue_name: ClassVar[str] = DEFAULT_FINANCIAL_PARSE_QUEUE
+    extra_fields: ClassVar[tuple[str, ...]] = ("raw_bucket", "raw_object_key")
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> FinancialParseJob:
+        kwargs = cls._base_kwargs_from_dict(payload)
+        kwargs["raw_bucket"] = _require_string(payload, "raw_bucket")
+        kwargs["raw_object_key"] = _require_string(payload, "raw_object_key")
+        return cls(**kwargs)
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialChunkJob(FinancialJobBase):
+    """Job requesting a worker to chunk parsed Markdown/JSON artifacts."""
+
+    markdown_bucket: str
+    markdown_object_key: str
+    json_bucket: str
+    json_object_key: str
+
+    queue_name: ClassVar[str] = DEFAULT_FINANCIAL_CHUNK_QUEUE
+    extra_fields: ClassVar[tuple[str, ...]] = (
+        "markdown_bucket",
+        "markdown_object_key",
+        "json_bucket",
+        "json_object_key",
+    )
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> FinancialChunkJob:
+        kwargs = cls._base_kwargs_from_dict(payload)
+        kwargs["markdown_bucket"] = _require_string(payload, "markdown_bucket")
+        kwargs["markdown_object_key"] = _require_string(payload, "markdown_object_key")
+        kwargs["json_bucket"] = _require_string(payload, "json_bucket")
+        kwargs["json_object_key"] = _require_string(payload, "json_object_key")
+        return cls(**kwargs)
+
+
+@dataclass(frozen=True, slots=True)
+class FinancialEmbeddingJob(FinancialJobBase):
+    """Job requesting a worker to embed chunks and write vectors to Qdrant."""
+
+    chunks_bucket: str
+    chunks_object_key: str
+    qdrant_collection: str
+
+    queue_name: ClassVar[str] = DEFAULT_FINANCIAL_EMBEDDING_QUEUE
+    extra_fields: ClassVar[tuple[str, ...]] = (
+        "chunks_bucket",
+        "chunks_object_key",
+        "qdrant_collection",
+    )
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> FinancialEmbeddingJob:
+        kwargs = cls._base_kwargs_from_dict(payload)
+        kwargs["chunks_bucket"] = _require_string(payload, "chunks_bucket")
+        kwargs["chunks_object_key"] = _require_string(payload, "chunks_object_key")
+        kwargs["qdrant_collection"] = _require_string(payload, "qdrant_collection")
+        return cls(**kwargs)
+
+
+__all__ = [
+    "COMMON_FIELDS",
+    "DEFAULT_FINANCIAL_CHUNK_QUEUE",
+    "DEFAULT_FINANCIAL_DOWNLOAD_QUEUE",
+    "DEFAULT_FINANCIAL_EMBEDDING_QUEUE",
+    "DEFAULT_FINANCIAL_PARSE_QUEUE",
+    "FINANCIAL_CHUNK_QUEUE_ENV",
+    "FINANCIAL_DOWNLOAD_QUEUE_ENV",
+    "FINANCIAL_EMBEDDING_QUEUE_ENV",
+    "FINANCIAL_PARSE_QUEUE_ENV",
+    "FinancialChunkJob",
+    "FinancialDownloadJob",
+    "FinancialEmbeddingJob",
+    "FinancialJobBase",
+    "FinancialParseJob",
+    "financial_chunk_queue_name",
+    "financial_download_queue_name",
+    "financial_embedding_queue_name",
+    "financial_parse_queue_name",
+    "financial_queue_names",
+]

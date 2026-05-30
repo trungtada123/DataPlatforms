@@ -1,0 +1,2 @@
+"""Market ingestion command facade."""
+

@@ -1,0 +1,346 @@
+"""Vietstock financial report discovery and download helpers."""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import asdict, dataclass
+from typing import Any
+
+import requests
+
+
+VIETSTOCK_SOURCE = "VIETSTOCK"
+VIETSTOCK_BASE_URL = "https://static2.vietstock.vn/data"
+DEFAULT_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+DEFAULT_QUARTER_MAP = {1: "QUY%201", 2: "QUY%202", 3: "QUY%203", 4: "QUY%204"}
+DEFAULT_QUARTER_PERIODS = {
+    1: ("Q1",),
+    2: ("Q2", "6T"),
+    3: ("Q3", "9T"),
+    4: ("Q4",),
+}
+DEFAULT_REPORT_TYPES = ("Soatxet", "KiemToan")
+DEFAULT_SCOPES = ("Congtyme", "Hopnhat")
+
+
+class VietstockSourceError(RuntimeError):
+    """Raised when Vietstock discovery or download cannot complete."""
+
+
+@dataclass(slots=True)
+class VietstockReportCandidate:
+    """Normalized report candidate shared by discover, DB metadata, and later workers."""
+
+    doc_id: str
+    ticker: str
+    exchange: str
+    fiscal_year: int
+    period: str
+    quarter: int | None
+    report_type: str
+    report_family: str
+    scope: str | None
+    source: str
+    source_url: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the canonical payload shape requested by the ingest pipeline."""
+
+        return asdict(self)
+
+
+def _normalize_code(value: str) -> str:
+    return value.strip().upper()
+
+
+def _slug_part(value: Any) -> str:
+    raw = str(value or "").strip()
+    cleaned = "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in raw)
+    return cleaned or "NA"
+
+
+def _build_doc_id(
+    *,
+    ticker: str,
+    fiscal_year: int,
+    period: str,
+    quarter: int | None,
+    report_type: str,
+    scope: str | None,
+    report_family: str,
+) -> str:
+    ticker_part = _slug_part(_normalize_code(ticker))
+    if report_family == "BCTN":
+        return f"{ticker_part}_{fiscal_year}_BCTN"
+    quarter_part = f"Q{quarter}" if quarter is not None else "Annual"
+    return "_".join(
+        [
+            ticker_part,
+            str(fiscal_year),
+            _slug_part(quarter_part),
+            _slug_part(period),
+            _slug_part(report_type),
+            _slug_part(scope),
+        ]
+    )
+
+
+def build_bctc_url(
+    ticker: str,
+    exchange: str,
+    fiscal_year: int,
+    quarter: int,
+    period: str,
+    report_type: str,
+    scope: str,
+    *,
+    base_url: str = VIETSTOCK_BASE_URL,
+    quarter_map: Mapping[int, str] | None = None,
+) -> str:
+    """Build a Vietstock quarterly financial statement PDF URL."""
+
+    active_quarter_map = quarter_map or DEFAULT_QUARTER_MAP
+    if quarter not in active_quarter_map:
+        raise ValueError(f"Unsupported quarter {quarter}. Expected one of: {sorted(active_quarter_map)}.")
+
+    ticker_part = _normalize_code(ticker)
+    exchange_part = _normalize_code(exchange)
+    quarter_path = active_quarter_map[quarter]
+    return (
+        f"{base_url.rstrip('/')}/{exchange_part}/{int(fiscal_year)}/BCTC/VN/{quarter_path}/"
+        f"{ticker_part}_Baocaotaichinh_{period}_{int(fiscal_year)}_{report_type}_{scope}.pdf"
+    )
+
+
+def build_bctn_url(
+    ticker: str,
+    exchange: str,
+    fiscal_year: int,
+    *,
+    base_url: str = VIETSTOCK_BASE_URL,
+) -> str:
+    """Build a Vietstock annual report PDF URL."""
+
+    ticker_part = _normalize_code(ticker)
+    exchange_part = _normalize_code(exchange)
+    return (
+        f"{base_url.rstrip('/')}/{exchange_part}/{int(fiscal_year)}/BCTN/VN/"
+        f"{ticker_part}_Baocaothuongnien_{int(fiscal_year)}.pdf"
+    )
+
+
+def generate_candidate_urls(
+    *,
+    ticker: str,
+    exchange: str,
+    fiscal_year: int,
+    quarters: Sequence[int] | None = None,
+    periods_by_quarter: Mapping[int, Sequence[str]] | None = None,
+    report_types: Sequence[str] | None = None,
+    scopes: Sequence[str] | None = None,
+    include_annual: bool = True,
+) -> list[VietstockReportCandidate]:
+    """Generate candidate Vietstock report URLs without performing network I/O."""
+
+    active_quarters = tuple(sorted(DEFAULT_QUARTER_PERIODS) if quarters is None else quarters)
+    active_periods_by_quarter = periods_by_quarter or DEFAULT_QUARTER_PERIODS
+    active_report_types = tuple(DEFAULT_REPORT_TYPES if report_types is None else report_types)
+    active_scopes = tuple(DEFAULT_SCOPES if scopes is None else scopes)
+
+    ticker_part = _normalize_code(ticker)
+    exchange_part = _normalize_code(exchange)
+    candidates: list[VietstockReportCandidate] = []
+
+    for quarter in active_quarters:
+        periods = active_periods_by_quarter.get(quarter)
+        if not periods:
+            raise ValueError(f"No Vietstock period configured for quarter {quarter}.")
+        for period in periods:
+            for report_type in active_report_types:
+                for scope in active_scopes:
+                    source_url = build_bctc_url(
+                        ticker_part,
+                        exchange_part,
+                        fiscal_year,
+                        quarter,
+                        period,
+                        report_type,
+                        scope,
+                    )
+                    candidates.append(
+                        VietstockReportCandidate(
+                            doc_id=_build_doc_id(
+                                ticker=ticker_part,
+                                fiscal_year=fiscal_year,
+                                period=period,
+                                quarter=quarter,
+                                report_type=report_type,
+                                scope=scope,
+                                report_family="BCTC",
+                            ),
+                            ticker=ticker_part,
+                            exchange=exchange_part,
+                            fiscal_year=int(fiscal_year),
+                            period=period,
+                            quarter=quarter,
+                            report_type=report_type,
+                            report_family="BCTC",
+                            scope=scope,
+                            source=VIETSTOCK_SOURCE,
+                            source_url=source_url,
+                        )
+                    )
+
+    if include_annual:
+        period = "Annual"
+        report_type = "BCTN"
+        source_url = build_bctn_url(ticker_part, exchange_part, fiscal_year)
+        candidates.append(
+            VietstockReportCandidate(
+                doc_id=_build_doc_id(
+                    ticker=ticker_part,
+                    fiscal_year=fiscal_year,
+                    period=period,
+                    quarter=None,
+                    report_type=report_type,
+                    scope=None,
+                    report_family="BCTN",
+                ),
+                ticker=ticker_part,
+                exchange=exchange_part,
+                fiscal_year=int(fiscal_year),
+                period=period,
+                quarter=None,
+                report_type=report_type,
+                report_family="BCTN",
+                scope=None,
+                source=VIETSTOCK_SOURCE,
+                source_url=source_url,
+            )
+        )
+
+    return candidates
+
+
+def check_url(
+    url: str,
+    *,
+    http_client: Any | None = None,
+    timeout: int | float = 6,
+    headers: Mapping[str, str] | None = None,
+) -> bool:
+    """Return True when Vietstock reports the PDF URL exists."""
+
+    client = http_client or requests
+    try:
+        response = client.head(url, timeout=timeout, headers=dict(headers or DEFAULT_HEADERS))
+    except Exception:  # noqa: BLE001
+        return False
+    return getattr(response, "status_code", None) == 200
+
+
+def download_pdf_bytes(
+    url: str,
+    *,
+    http_client: Any | None = None,
+    timeout: int | float = 30,
+    headers: Mapping[str, str] | None = None,
+) -> bytes:
+    """Download one Vietstock PDF and return raw bytes."""
+
+    client = http_client or requests
+    try:
+        response = client.get(url, timeout=timeout, headers=dict(headers or DEFAULT_HEADERS))
+    except Exception as exc:  # noqa: BLE001
+        raise VietstockSourceError(f"Failed to download Vietstock PDF: {url}") from exc
+
+    status_code = getattr(response, "status_code", None)
+    if status_code != 200:
+        raise VietstockSourceError(f"Vietstock PDF download returned status {status_code}: {url}")
+
+    content = getattr(response, "content", b"")
+    if not content:
+        raise VietstockSourceError(f"Vietstock PDF download returned empty content: {url}")
+    return bytes(content)
+
+
+def _persist_discovered_document(
+    payload: dict[str, Any],
+    *,
+    repository_fn: Callable[..., Any] | None = None,
+) -> None:
+    active_repository_fn = repository_fn
+    if active_repository_fn is None:
+        from .document_repository import create_or_update_document as active_repository_fn
+
+    active_repository_fn(
+        doc_id=payload["doc_id"],
+        ticker=payload["ticker"],
+        fiscal_year=payload["fiscal_year"],
+        period=payload["period"],
+        quarter=payload["quarter"],
+        report_type=payload["report_type"],
+        report_family=payload["report_family"],
+        scope=payload["scope"],
+        source=payload["source"],
+        source_url=payload["source_url"],
+        status="DISCOVERED",
+    )
+
+
+def discover_reports(
+    *,
+    ticker: str,
+    exchange: str,
+    fiscal_year: int,
+    quarters: Sequence[int] | None = None,
+    periods_by_quarter: Mapping[int, Sequence[str]] | None = None,
+    report_types: Sequence[str] | None = None,
+    scopes: Sequence[str] | None = None,
+    include_annual: bool = True,
+    persist: bool = True,
+    http_client: Any | None = None,
+    repository_fn: Callable[..., Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Discover existing Vietstock reports and optionally persist DISCOVERED metadata."""
+
+    found_reports: list[dict[str, Any]] = []
+    candidates = generate_candidate_urls(
+        ticker=ticker,
+        exchange=exchange,
+        fiscal_year=fiscal_year,
+        quarters=quarters,
+        periods_by_quarter=periods_by_quarter,
+        report_types=report_types,
+        scopes=scopes,
+        include_annual=include_annual,
+    )
+
+    for candidate in candidates:
+        if not check_url(candidate.source_url, http_client=http_client):
+            continue
+        payload = candidate.to_dict()
+        if persist:
+            _persist_discovered_document(payload, repository_fn=repository_fn)
+        found_reports.append(payload)
+
+    return found_reports
+
+
+__all__ = [
+    "DEFAULT_HEADERS",
+    "DEFAULT_QUARTER_MAP",
+    "DEFAULT_QUARTER_PERIODS",
+    "DEFAULT_REPORT_TYPES",
+    "DEFAULT_SCOPES",
+    "VIETSTOCK_BASE_URL",
+    "VIETSTOCK_SOURCE",
+    "VietstockReportCandidate",
+    "VietstockSourceError",
+    "build_bctc_url",
+    "build_bctn_url",
+    "check_url",
+    "discover_reports",
+    "download_pdf_bytes",
+    "generate_candidate_urls",
+]
