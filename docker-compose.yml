@@ -4,13 +4,13 @@ services:
     container_name: ssi-postgres
     restart: unless-stopped
     env_file:
-      - .env.docker
+      - .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_PORT:-15432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -18,7 +18,6 @@ services:
       retries: 10
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/zoneinfo/Asia/Saigon:/usr/share/zoneinfo/Asia/Saigon:ro
 
   qdrant:
     image: qdrant/qdrant:v1.14.1
@@ -35,7 +34,7 @@ services:
     container_name: ssi-minio
     restart: unless-stopped
     env_file:
-      - .env.docker
+      - .env
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -56,7 +55,7 @@ services:
     container_name: ssi-rabbitmq
     restart: unless-stopped
     env_file:
-      - .env.docker
+      - .env
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
@@ -81,10 +80,13 @@ services:
     restart: unless-stopped
     shm_size: "1gb"
     env_file:
-      - .env.docker
+      - .env
     environment:
-      PYTHONPATH: /app/backend
+      PYTHONPATH: /app/backend:/app/backend/src
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_CACHE: /root/.cache/huggingface/hub
+      STOCK_ETL_ENV_FILE: /app/.env
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       FINANCIAL_REPORTS_QDRANT_URL: ${FINANCIAL_REPORTS_QDRANT_URL}
@@ -108,21 +110,8 @@ services:
         condition: service_started
     ports:
       - "8000:8000"
-
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
-    container_name: ssi-frontend
-    restart: unless-stopped
-    environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
-    depends_on:
-      backend:
-        condition: service_started
-    ports:
-      - "5173:80"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
 
   worker:
     build:
@@ -131,9 +120,10 @@ services:
     container_name: ssi-worker
     restart: unless-stopped
     env_file:
-      - .env.docker
+      - .env
     environment:
-      PYTHONPATH: /app/backend
+      PYTHONPATH: /app/backend:/app/backend/src
+      STOCK_ETL_ENV_FILE: /app/.env
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
@@ -142,6 +132,141 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+
+  financial-download-worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: ssi-financial-download-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/backend:/app/backend/src:/app/src
+      STOCK_ETL_ENV_FILE: /app/.env
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE}
+    command: ["python", "-m", "ingestion.financial_reports.download_worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  financial-parse-worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: ssi-financial-parse-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/backend:/app/backend/src:/app/src
+      STOCK_ETL_ENV_FILE: /app/.env
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE}
+    command: ["python", "-m", "ingestion.financial_reports.parse_worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  financial-chunk-worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: ssi-financial-chunk-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/backend:/app/backend/src:/app/src
+      STOCK_ETL_ENV_FILE: /app/.env
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE}
+      FINANCIAL_REPORTS_QDRANT_COLLECTION: ${FINANCIAL_REPORTS_QDRANT_COLLECTION:-bctc_chunks}
+    command: ["python", "-m", "ingestion.financial_reports.chunk_worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  financial-embedding-worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    container_name: ssi-financial-embedding-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app/backend:/app/backend/src:/app/src
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_CACHE: /root/.cache/huggingface/hub
+      STOCK_ETL_ENV_FILE: /app/.env
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_DEFAULT_VHOST:-/}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_SECURE: ${MINIO_SECURE}
+      FINANCIAL_REPORTS_QDRANT_URL: ${FINANCIAL_REPORTS_QDRANT_URL}
+      FINANCIAL_REPORTS_QDRANT_COLLECTION: ${FINANCIAL_REPORTS_QDRANT_COLLECTION:-bctc_chunks}
+      FINANCIAL_REPORTS_EMBEDDING_MODEL: ${FINANCIAL_REPORTS_EMBEDDING_MODEL:-BAAI/bge-m3}
+      FINANCIAL_REPORTS_EMBEDDING_DEVICE: ${FINANCIAL_REPORTS_EMBEDDING_DEVICE:-cpu}
+    command: ["python", "-m", "ingestion.financial_reports.embedding_worker"]
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
 
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -182,15 +307,15 @@ services:
       dockerfile: docker/airflow.Dockerfile
     container_name: ssi-airflow-init
     env_file:
-      - .env.docker
+      - .env
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
       AIRFLOW__WEBSERVER__RBAC: "true"
       AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
-      PYTHONPATH: /opt/airflow/backend
+      PYTHONPATH: /opt/airflow/backend:/opt/airflow/backend/src:/opt/airflow/src
     depends_on:
       postgres:
         condition: service_healthy
@@ -210,15 +335,15 @@ services:
     container_name: ssi-airflow-webserver
     restart: unless-stopped
     env_file:
-      - .env.docker
+      - .env
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
       AIRFLOW__WEBSERVER__RBAC: "true"
       AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
-      PYTHONPATH: /opt/airflow/backend
+      PYTHONPATH: /opt/airflow/backend:/opt/airflow/backend/src:/opt/airflow/src
     depends_on:
       postgres:
         condition: service_healthy
@@ -239,15 +364,15 @@ services:
     container_name: ssi-airflow-scheduler
     restart: unless-stopped
     env_file:
-      - .env.docker
+      - .env
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${AIRFLOW_POSTGRES_DB}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT}/${POSTGRES_DB}
       AIRFLOW__WEBSERVER__RBAC: "true"
       AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session
-      PYTHONPATH: /opt/airflow/backend
+      PYTHONPATH: /opt/airflow/backend:/opt/airflow/backend/src:/opt/airflow/src
     depends_on:
       postgres:
         condition: service_healthy
@@ -264,6 +389,7 @@ volumes:
   qdrant_data:
   minio_data:
   rabbitmq_data:
+  hf_cache:
   airflow_logs:
   prometheus_data:
   grafana_data:

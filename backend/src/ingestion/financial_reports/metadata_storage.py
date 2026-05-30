@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.config.base import load_environment
-from src.core.minio_client import ensure_bucket, get_minio_client, upload_bytes
+from config.base import load_environment
+from core.minio_client import ensure_bucket, get_minio_client, upload_bytes
 from src.utils.logger import get_logger
 
 from .markdown_parser import ParsedDocument

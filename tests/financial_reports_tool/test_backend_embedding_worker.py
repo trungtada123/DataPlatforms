@@ -153,4 +153,4 @@ class EmbeddingWorkerTests(TestCase):
             error_message="chunks missing",
         )
         self.assertEqual(add_event.call_args.kwargs["event_type"], "EMBEDDING_FAILED")
-        channel.basic_ack.assert_called_once_with(delivery_tag=71) 
+        channel.basic_ack.assert_called_once_with(delivery_tag=71)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from .contracts import get_profile
+from .chunking_profiles import get_profile
 from .contracts import ReportCandidate
 from .retrieval import (
     BALANCE_SHEET_METRICS,

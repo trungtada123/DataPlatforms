@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from src.agents.financial_agent.contracts import ReportCandidate
-from src.agents.financial_agent.rerank import rerank_candidate
+from agents.financial_agent.contracts import ReportCandidate
+from agents.financial_agent.rerank import rerank_candidate
 
 
 class FinancialReportsRerankTests(TestCase):
@@ -64,4 +64,3 @@ class FinancialReportsRerankTests(TestCase):
         rerank_candidate("According to ACB Q2 2025 financial report, what is total assets as of 30 June 2025?", noisy_row)
 
         self.assertGreater(exact_row.rerank_score, noisy_row.rerank_score)
-

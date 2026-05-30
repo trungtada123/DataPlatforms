@@ -11,7 +11,7 @@ from typing import Any, cast
 
 from config.base import load_environment
 from core.minio_client import ensure_bucket, get_minio_client, upload_bytes
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 
 from .document_repository import add_ingest_event, update_document_paths, update_document_status
 from .rabbitmq_messages import (
@@ -243,7 +243,8 @@ class FinancialReportDownloadWorker:
             port=self.rabbitmq_port,
             virtual_host=self.rabbitmq_vhost,
             credentials=credentials,
-            heartbeat=30,
+            heartbeat=int(os.getenv("RABBITMQ_HEARTBEAT_SECONDS", "600")),
+            blocked_connection_timeout=int(os.getenv("RABBITMQ_BLOCKED_CONNECTION_TIMEOUT_SECONDS", "900")),
         )
 
         connection = pika.BlockingConnection(parameters)

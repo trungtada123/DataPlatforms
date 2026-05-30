@@ -6,8 +6,8 @@ import json
 import re
 from typing import Any
 
-from src.core.llm_pool import GroqKeyPool
-from src.config.financial import FinancialReportsToolSettings
+from config.financial import FinancialSettings as FinancialReportsToolSettings
+from core.llm_pool import get_groq_pool
 from .retrieval import (
     context_block,
     detect_focus,
@@ -46,7 +46,7 @@ class FinancialReportsSynthesizer:
 
     def __init__(self, settings: FinancialReportsToolSettings) -> None:
         self.settings = settings
-        self._pool = GroqKeyPool(settings) if settings.groq_api_keys or settings.groq_api_key else None
+        self._pool = get_groq_pool(settings) if settings.groq_api_keys or settings.groq_api_key else None
 
     def rewrite_query(self, question: str) -> dict[str, Any]:
         """Tùy chọn dùng Groq để rewrite retrieval query."""

@@ -1,14 +1,15 @@
-"""Contracts nội bộ cho financial reports runtime."""
+"""Contracts for the canonical financial reports agent runtime."""
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
 class ReportQueryFilters(BaseModel):
-    """Bộ filter suy ra từ query người dùng."""
+    """Filters inferred from the user's financial report query."""
 
     ticker: str | None = None
     company_name: str | None = None
@@ -23,7 +24,7 @@ class ReportQueryFilters(BaseModel):
 
 
 class ReportQueryPlan(BaseModel):
-    """Kế hoạch truy vấn trước bước retrieval."""
+    """Retrieval plan created before vector search."""
 
     original_question: str
     normalized_question: str
@@ -33,7 +34,7 @@ class ReportQueryPlan(BaseModel):
 
 
 class ReportCandidate(BaseModel):
-    """Một candidate lấy từ Qdrant rồi được rerank."""
+    """One Qdrant candidate after vector search and heuristic rerank."""
 
     point_id: str
     qdrant_score: float
@@ -42,73 +43,54 @@ class ReportCandidate(BaseModel):
     rerank_score: float = 0.0
 
 
-"""Shared chunking profiles rút từ repo tool3 gốc."""
+class FinancialReportsHit(BaseModel):
+    """Preview of one retrieval hit returned by the financial reports tool."""
+
+    retrieval_id: str
+    point_id: str
+    chunk_type: str
+    page: int | None = None
+    section_title: str | None = None
+    qdrant_score: float
+    rerank_score: float
+    why: list[str] = Field(default_factory=list)
+    preview: str = ""
 
 
-from dataclasses import dataclass
+class FinancialReportsContext(BaseModel):
+    """Context item selected for grounded answer synthesis."""
+
+    retrieval_id: str
+    chunk_type: str
+    page: int | None = None
+    section_title: str | None = None
+    section_subtitle: str | None = None
+    source_ids: list[str] = Field(default_factory=list)
+    preview: str = ""
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
-@dataclass(frozen=True, slots=True)
-class ChunkingThresholds:
-    """Ngưỡng hỗ trợ retrieval/rerank cho financial reports."""
+class FinancialReportsToolResponse(BaseModel):
+    """End-to-end public response contract for the financial reports runtime."""
 
-    table_row_window_radius: int = 1
-    table_row_min_non_empty_cells: int = 2
-
-
-@dataclass(frozen=True, slots=True)
-class ScoringWeights:
-    """Trọng số rerank runtime rút gọn cho query-time path."""
-
-    retrieval_token_coverage_weight: float = 6.0
-    retrieval_exact_table_title_bonus: float = 6.0
-    retrieval_table_row_window_bonus: float = 4.0
-    retrieval_table_row_bonus: float = 3.5
-    retrieval_table_full_context_bonus: float = 1.0
-    retrieval_exact_row_bonus: float = 8.0
-    retrieval_row_prefix_bonus: float = 4.5
-    retrieval_row_partial_bonus: float = 2.5
-    retrieval_context_only_bonus: float = 1.0
-    retrieval_focus_row_miss_penalty: float = 1.8
-    retrieval_text_penalty: float = 1.0
-    retrieval_row_code_bonus: float = 0.6
-    retrieval_numeric_value_bonus: float = 1.2
-    retrieval_delta_ready_bonus: float = 1.2
-    retrieval_unit_note_bonus: float = 8.0
-    retrieval_unit_phrase_bonus: float = 5.0
-    retrieval_unit_text_bonus: float = 2.0
-    retrieval_unit_row_penalty: float = 3.0
-    retrieval_method_phrase_bonus: float = 6.0
-    retrieval_method_text_bonus: float = 3.0
-    retrieval_method_row_penalty: float = 4.0
-    retrieval_policy_phrase_bonus: float = 7.0
-    retrieval_policy_text_bonus: float = 3.0
-    retrieval_policy_row_penalty: float = 5.0
-    retrieval_numbered_section_text_bonus: float = 3.0
-    retrieval_toc_penalty: float = 12.0
+    question: str
+    normalized_question: str
+    status: str
+    summary: str
+    filters: dict[str, Any] = Field(default_factory=dict)
+    retrieval_queries: list[str] = Field(default_factory=list)
+    hits: list[FinancialReportsHit] = Field(default_factory=list)
+    contexts: list[FinancialReportsContext] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    raw_response: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-@dataclass(frozen=True, slots=True)
-class ChunkingProfile:
-    """Profile tối thiểu dùng cho runtime-query path."""
-
-    name: str
-    description: str
-    thresholds: ChunkingThresholds
-    scoring: ScoringWeights
-
-
-FINANCIAL_REPORT_VI_PROFILE = ChunkingProfile(
-    name="financial_report_vi",
-    description="Vietnamese financial report runtime retrieval profile.",
-    thresholds=ChunkingThresholds(),
-    scoring=ScoringWeights(),
-)
-
-
-def get_profile(name: str) -> ChunkingProfile:
-    """Lấy runtime chunking profile theo tên."""
-
-    if name != FINANCIAL_REPORT_VI_PROFILE.name:
-        raise KeyError(f"Unknown profile `{name}` for financial reports runtime.")
-    return FINANCIAL_REPORT_VI_PROFILE
+__all__ = [
+    "FinancialReportsContext",
+    "FinancialReportsHit",
+    "FinancialReportsToolResponse",
+    "ReportCandidate",
+    "ReportQueryFilters",
+    "ReportQueryPlan",
+]

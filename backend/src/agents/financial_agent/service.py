@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.schemas.orchestration import TraceCollector
-from src.config.financial import FinancialReportsToolSettings, get_financial_reports_settings
-from src.schemas.api import FinancialReportsContext, FinancialReportsHit, FinancialReportsToolResponse
+from config.financial import FinancialSettings as FinancialReportsToolSettings
+from config.financial import get_financial_settings
+from core.vector_store import FinancialReportsQdrantStore
+
+from .contracts import FinancialReportsContext, FinancialReportsHit, FinancialReportsToolResponse
 from .query_embedder import FinancialReportsEmbedder
-from src.core.vector_store import FinancialReportsQdrantStore
 from .rerank import rerank_candidate
 from .retrieval import (
     BALANCE_SHEET_METRICS,
@@ -40,7 +41,7 @@ class FinancialReportsQueryService:
         store: FinancialReportsQdrantStore | None = None,
         synthesizer: FinancialReportsSynthesizer | None = None,
     ) -> None:
-        self.settings = settings or get_financial_reports_settings()
+        self.settings = settings or get_financial_settings()
         self.embedder = embedder or FinancialReportsEmbedder(
             self.settings.embedding_model,
             device=self.settings.embedding_device,
@@ -58,7 +59,7 @@ class FinancialReportsQueryService:
         *,
         trace_id: str | None = None,
         debug: bool = False,
-        trace_collector: TraceCollector | None = None,
+        trace_collector: Any | None = None,
     ) -> FinancialReportsToolResponse:
         """Chạy pipeline query-time cho financial reports."""
 

@@ -43,3 +43,9 @@ data/
 # Local credential exports/service accounts
 *service-account*.json
 *credentials*.json
+.gitnexus
+
+# Local markdown notes (non-project)
+/AGENTS.md
+/CLAUDE.md
+/ETL_Market_Data/AGENTS.md

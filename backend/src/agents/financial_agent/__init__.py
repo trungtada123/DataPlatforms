@@ -1,22 +1,16 @@
-"""Financial agent package with lazy public imports."""
+"""Financial agent package."""
 
-__all__ = [
-    "FinancialReportsEmbedder",
-    "FinancialReportsQdrantStore",
-    "FinancialReportsQueryService",
-    "answer",
-]
+from __future__ import annotations
+
+from typing import Any
 
 
-def __getattr__(name: str):
-    if name == "FinancialReportsEmbedder":
-        from .query_embedder import FinancialReportsEmbedder
+__all__ = ["FinancialReportsQueryService", "answer"]
 
-        return FinancialReportsEmbedder
-    if name == "FinancialReportsQdrantStore":
-        from src.core.vector_store import FinancialReportsQdrantStore
 
-        return FinancialReportsQdrantStore
+def __getattr__(name: str) -> Any:
+    """Lazy exports avoid import cycles with core vector-store contracts."""
+
     if name == "FinancialReportsQueryService":
         from .service import FinancialReportsQueryService
 

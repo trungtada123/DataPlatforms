@@ -12,7 +12,7 @@ from typing import Any, cast
 from config.base import load_environment
 from config.financial import get_financial_settings
 from core.minio_client import download_bytes, ensure_bucket, get_minio_client, upload_bytes
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 
 from .chunker import Chunk, chunk_document
 from .document_repository import add_ingest_event, update_document_status
@@ -321,7 +321,8 @@ class FinancialReportChunkWorker:
             port=self.rabbitmq_port,
             virtual_host=self.rabbitmq_vhost,
             credentials=credentials,
-            heartbeat=30,
+            heartbeat=int(os.getenv("RABBITMQ_HEARTBEAT_SECONDS", "600")),
+            blocked_connection_timeout=int(os.getenv("RABBITMQ_BLOCKED_CONNECTION_TIMEOUT_SECONDS", "900")),
         )
 
         connection = pika.BlockingConnection(parameters)

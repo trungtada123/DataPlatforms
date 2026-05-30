@@ -178,4 +178,3 @@ class ParseWorkerTests(TestCase):
         self.assertEqual(add_event.call_args.kwargs["new_status"], "FAILED")
         channel.basic_publish.assert_not_called()
         channel.basic_ack.assert_called_once_with(delivery_tag=52)
-        

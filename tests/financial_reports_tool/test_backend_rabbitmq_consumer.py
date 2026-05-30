@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import Mock, patch
 
-from src.ingestion.financial_reports.rabbitmq_consumer import FinancialIngestConsumer
+from ingestion.financial_reports.rabbitmq_consumer import FinancialIngestConsumer
 
 
 def _valid_message() -> dict[str, object]:
@@ -107,4 +107,3 @@ class BackendRabbitMQConsumerTests(TestCase):
         fake_channel.basic_qos.assert_called_once_with(prefetch_count=1)
         fake_channel.basic_consume.assert_called_once()
         fake_connection.close.assert_called_once()
-

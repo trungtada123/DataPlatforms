@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from utils.logger import get_logger
+from src.utils.logger import get_logger
 
 
 LOGGER = get_logger(__name__)

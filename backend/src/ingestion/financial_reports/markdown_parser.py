@@ -5,11 +5,57 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from hashlib import sha1
+from html.parser import HTMLParser
 from typing import Any
 
 
 _HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.+?)\s*$")
 _TABLE_SEPARATOR_RE = re.compile(r"^:?-{3,}:?$")
+_HTML_TABLE_RE = re.compile(r"<table\b.*?</table>", re.IGNORECASE | re.DOTALL)
+
+
+class _HTMLTableParser(HTMLParser):
+    """Small HTML table parser for LandingAI markdown that contains raw HTML."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.rows: list[list[str]] = []
+        self.header_row_indexes: set[int] = set()
+        self._in_row = False
+        self._in_cell = False
+        self._current_row: list[str] = []
+        self._current_cell: list[str] = []
+        self._current_cell_is_header = False
+        self._current_row_has_header = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tr":
+            self._in_row = True
+            self._current_row = []
+            self._current_row_has_header = False
+        elif tag in {"td", "th"} and self._in_row:
+            self._in_cell = True
+            self._current_cell = []
+            self._current_cell_is_header = tag == "th"
+            self._current_row_has_header = self._current_row_has_header or tag == "th"
+
+    def handle_data(self, data: str) -> None:
+        if self._in_cell and data:
+            self._current_cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"td", "th"} and self._in_cell:
+            cell_text = re.sub(r"\s+", " ", " ".join(self._current_cell)).strip()
+            self._current_row.append(cell_text)
+            self._in_cell = False
+        elif tag == "tr" and self._in_row:
+            if any(cell.strip() for cell in self._current_row):
+                if self._current_row_has_header:
+                    self.header_row_indexes.add(len(self.rows))
+                self.rows.append(self._current_row)
+            self._in_row = False
+            self._current_cell_is_header = False
+            self._current_row_has_header = False
 
 
 @dataclass(slots=True)
@@ -64,6 +110,16 @@ def _split_table_row(line: str) -> list[str]:
     if not stripped:
         return []
     return [cell.strip() for cell in stripped.split("|")]
+
+
+def _render_markdown_table(header: list[str], rows: list[list[str]]) -> str:
+    rendered: list[str] = []
+    if header:
+        rendered.append(f"| {' | '.join(header)} |")
+        rendered.append(f"| {' | '.join(['---'] * len(header))} |")
+    for row in rows:
+        rendered.append(f"| {' | '.join(row)} |")
+    return "\n".join(rendered).strip()
 
 
 def _is_table_separator(line: str) -> bool:
@@ -240,6 +296,52 @@ def _parse_markdown_tables(doc_id: str, page_items: list[tuple[int, str]]) -> li
     return tables
 
 
+def _parse_html_tables(doc_id: str, page_items: list[tuple[int, str]]) -> list[ParsedTable]:
+    tables: list[ParsedTable] = []
+    seen_fingerprints: set[str] = set()
+
+    for page_number, page_text in sorted(page_items, key=lambda item: item[0]):
+        for match in _HTML_TABLE_RE.finditer(page_text):
+            parser = _HTMLTableParser()
+            parser.feed(match.group(0))
+            rows = [row for row in parser.rows if len(row) >= 2 and any(cell.strip() for cell in row)]
+            if len(rows) < 2:
+                continue
+
+            if parser.header_row_indexes:
+                header_index = min(parser.header_row_indexes)
+                header = rows[header_index]
+                data_rows = [row for index, row in enumerate(rows) if index != header_index]
+            else:
+                header = rows[0]
+                data_rows = rows[1:]
+
+            if not header or not data_rows:
+                continue
+
+            section_title = f"Page {page_number}"
+            markdown = _render_markdown_table(header, data_rows)
+            fingerprint = f"{page_number}|{section_title}|{markdown}"
+            if fingerprint in seen_fingerprints:
+                continue
+            seen_fingerprints.add(fingerprint)
+
+            table_id = _stable_id("table", doc_id, len(tables), fingerprint)
+            tables.append(
+                ParsedTable(
+                    table_id=table_id,
+                    section_title=section_title,
+                    page=page_number,
+                    header=header,
+                    rows=data_rows,
+                    markdown=markdown,
+                    metadata={"source": "html_table"},
+                )
+            )
+
+    return tables
+
+
 def _parse_provider_tables(doc_id: str, raw: dict[str, Any]) -> list[ParsedTable]:
     candidates: list[dict[str, Any]] = [raw]
     nested = raw.get("result")
@@ -276,13 +378,7 @@ def _parse_provider_tables(doc_id: str, raw: dict[str, Any]) -> list[ParsedTable
 
             markdown = _as_text(item.get("markdown")).strip()
             if not markdown and (header_cells or rows):
-                rendered = []
-                if header_cells:
-                    rendered.append(f"| {' | '.join(header_cells)} |")
-                    rendered.append(f"| {' | '.join(['---'] * len(header_cells))} |")
-                for row in rows:
-                    rendered.append(f"| {' | '.join(row)} |")
-                markdown = "\n".join(rendered).strip()
+                markdown = _render_markdown_table(header_cells, rows)
 
             if not markdown:
                 continue
@@ -325,11 +421,12 @@ def parse_landingai_output(raw: dict[str, Any]) -> ParsedDocument:
     sections = _parse_sections(doc_id, page_items)
 
     markdown_tables = _parse_markdown_tables(doc_id, page_items)
+    html_tables = _parse_html_tables(doc_id, page_items)
     provider_tables = _parse_provider_tables(doc_id, raw)
 
     merged_tables: list[ParsedTable] = []
     seen_table_keys: set[str] = set()
-    for table in [*markdown_tables, *provider_tables]:
+    for table in [*markdown_tables, *html_tables, *provider_tables]:
         table_key = f"{table.page}|{table.section_title}|{table.markdown}"
         if table_key in seen_table_keys:
             continue

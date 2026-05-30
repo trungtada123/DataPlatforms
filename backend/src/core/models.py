@@ -10,9 +10,12 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     PrimaryKeyConstraint,
     String,
+    Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import declarative_base
@@ -153,4 +156,62 @@ class IntradayPrice(Base):
     )
 
 
-__all__ = ["Base", "Symbol", "DailyStockRaw", "DailyStockFeature", "IntradayPrice"]
+class FinancialReportDocument(Base):
+    """Metadata and lifecycle status for one financial report document."""
+
+    __tablename__ = "financial_report_documents"
+    __table_args__ = (
+        UniqueConstraint("doc_id", name="uq_financial_report_documents_doc_id"),
+        Index("idx_financial_report_documents_ticker_year", "ticker", "fiscal_year"),
+        Index("idx_financial_report_documents_status", "status"),
+    )
+
+    id = Column(BIGINT, primary_key=True, autoincrement=True)
+    doc_id = Column(String(255), nullable=False)
+    ticker = Column(String(20), nullable=False)
+    fiscal_year = Column(Integer, nullable=False)
+    period = Column(String(50), nullable=False)
+    quarter = Column(Integer)
+    report_type = Column(String(50))
+    report_family = Column(String(50))
+    scope = Column(String(50))
+    source = Column(String(100), nullable=False)
+    source_url = Column(Text)
+    raw_path = Column(Text)
+    markdown_path = Column(Text)
+    json_path = Column(Text)
+    qdrant_collection = Column(String(255))
+    status = Column(String(50), nullable=False, default="DISCOVERED", server_default="DISCOVERED")
+    error_message = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+
+
+class FinancialReportIngestEvent(Base):
+    """Append-only lifecycle event for financial report ingestion."""
+
+    __tablename__ = "financial_report_ingest_events"
+    __table_args__ = (
+        Index("idx_financial_report_ingest_events_doc_id", "doc_id"),
+        Index("idx_financial_report_ingest_events_created_at", "created_at"),
+    )
+
+    id = Column(BIGINT, primary_key=True, autoincrement=True)
+    doc_id = Column(String(255), nullable=False)
+    event_type = Column(String(100), nullable=False)
+    old_status = Column(String(50))
+    new_status = Column(String(50))
+    message = Column(Text)
+    error_detail = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+__all__ = [
+    "Base",
+    "Symbol",
+    "DailyStockRaw",
+    "DailyStockFeature",
+    "IntradayPrice",
+    "FinancialReportDocument",
+    "FinancialReportIngestEvent",
+]

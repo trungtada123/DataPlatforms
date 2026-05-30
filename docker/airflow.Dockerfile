@@ -1,14 +1,9 @@
 FROM apache/airflow:2.10.4-python3.11
 
-ENV PYTHONPATH=/opt/airflow/backend
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV PYTHONPATH=/opt/airflow/backend:/opt/airflow/backend/src:/opt/airflow/src
 
 USER airflow
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
-
-USER root
-RUN python -m playwright install --with-deps chromium \
-    && chmod -R 755 /ms-playwright
+COPY docker/airflow-requirements.txt /tmp/airflow-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/airflow-requirements.txt
 
 USER airflow

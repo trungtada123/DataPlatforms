@@ -172,4 +172,4 @@ def test_publish_json_payloads(monkeypatch: Any) -> None:
     }
     assert json.loads(published[0]["body"]) == {"doc_id": "ACB_2025_Q2", "ticker": "ACB"}
     assert published[0]["routing_key"] == "financial_download_jobs"
-    
+

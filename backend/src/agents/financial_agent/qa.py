@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.schemas.orchestration import AgentResult, IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
+from schemas.orchestration import AgentResult, IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
 
 from .service import FinancialReportsQueryService
 
@@ -95,4 +95,3 @@ def answer(query: str) -> AgentResult:
             limitations=[str(exc)],
             debug_trace=None,
         )
-

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from unittest import TestCase
 
-from src.config.financial import FinancialReportsToolSettings
-from src.agents.financial_agent.synthesis import FinancialReportsSynthesizer
+from agents.financial_agent.synthesis import FinancialReportsSynthesizer
+from config.financial import FinancialSettings
 
 
 class FinancialReportsSynthesisTests(TestCase):
     """Kiểm tra các nhánh deterministic quan trọng của synthesis."""
 
-    def _build_settings(self) -> FinancialReportsToolSettings:
-        return FinancialReportsToolSettings(
+    def _build_settings(self) -> FinancialSettings:
+        return FinancialSettings(
             qdrant_url="http://localhost:6333",
             qdrant_collection="bctc_chunks",
             qdrant_api_key=None,
@@ -28,6 +28,7 @@ class FinancialReportsSynthesisTests(TestCase):
             groq_max_retries=0,
             groq_retry_delay_seconds=0.0,
             groq_base_url="https://api.groq.com/openai/v1",
+            parsed_output_dir=None,
         )
 
     def test_synthesize_returns_explicit_opinion_answer_when_context_has_conclusion(self) -> None:
@@ -107,4 +108,3 @@ class FinancialReportsSynthesisTests(TestCase):
         self.assertIn("tại 30/06/2025 là 619.850.276", answer)
         self.assertIn("tại 31/12/2024 là 569.734.624", answer)
         self.assertIn("page=6", answer)
-

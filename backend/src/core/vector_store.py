@@ -1,14 +1,14 @@
-"""Qdrant access layer cho financial reports runtime."""
+"""Qdrant access layer for financial reports retrieval and vector writes."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from src.agents.financial_agent.contracts import ReportCandidate
+from agents.financial_agent.contracts import ReportCandidate
 
 
 class FinancialReportsQdrantStore:
-    """Wrapper mỏng cho các thao tác query/scroll cần ở runtime."""
+    """Thin wrapper around Qdrant operations required by the financial runtime."""
 
     def __init__(self, *, url: str, collection_name: str, api_key: str | None = None) -> None:
         from qdrant_client import QdrantClient
@@ -17,7 +17,7 @@ class FinancialReportsQdrantStore:
         self.client = QdrantClient(url=url, api_key=api_key)
 
     def query(self, *, vector: list[float], query_filter: Any, limit: int) -> list[ReportCandidate]:
-        """Query top points từ collection hiện tại."""
+        """Query top points from the configured Qdrant collection."""
 
         response = self.client.query_points(
             collection_name=self.collection_name,
@@ -37,7 +37,7 @@ class FinancialReportsQdrantStore:
         ]
 
     def scroll_candidates(self, *, query_filter: Any, limit: int) -> list[ReportCandidate]:
-        """Scroll candidates theo filter để rescue lexical/exact-row sau vector retrieval."""
+        """Scroll candidates by filter for lexical/exact-row rescue."""
 
         collected: list[ReportCandidate] = []
         offset = None
@@ -67,7 +67,7 @@ class FinancialReportsQdrantStore:
         return collected
 
     def get_payload_by_retrieval_id(self, retrieval_id: str) -> dict[str, Any] | None:
-        """Đọc một payload theo retrieval_id."""
+        """Read one payload by its stable retrieval_id."""
 
         from qdrant_client import models
 
@@ -85,7 +85,7 @@ class FinancialReportsQdrantStore:
         return dict(points[0].payload or {})
 
     def get_parent_table_payload(self, parent_table_id: str) -> dict[str, Any] | None:
-        """Đọc table_full parent của row/window payload."""
+        """Read the table_full parent for a row/window payload."""
 
         from qdrant_client import models
 
@@ -104,3 +104,6 @@ class FinancialReportsQdrantStore:
         if points:
             return dict(points[0].payload or {})
         return self.get_payload_by_retrieval_id(f"financial_report_vi_{parent_table_id}")
+
+
+__all__ = ["FinancialReportsQdrantStore"]
