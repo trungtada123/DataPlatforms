@@ -1,1 +1,45 @@
-.gitnexus
+.env
+.env.local
+.env.docker
+*.env
+!.env.example
+!.env.local.example
+!.env.docker.example
+__pycache__/
+.pytest_cache/
+logs/*
+!logs/.gitkeep
+tmp/*
+!tmp/.gitkeep
+*.pyc
+postgres_data/
+airflow.cfg
+airflow.db
+airflow-webserver.pid
+exports/*.dump
+!exports/.gitkeep
+!exports/ssi_market_stock_only.dump
+news_artifacts/
+
+# Artifact crawl/query hash directories at repo root
+/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]/
+
+# Notebook/checkpoints
+.ipynb_checkpoints/
+
+# Parsed financial reports local/dev outputs
+data/financial_reports/parsed_output/
+
+# Additional local/runtime artifacts
+.venv/
+venv/
+node_modules/
+dist/
+mlruns/
+data/
+*.log
+*.tmp
+
+# Local credential exports/service accounts
+*service-account*.json
+*credentials*.json

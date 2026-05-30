@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **DataPlatforms-test** (1357 symbols, 3822 relationships, 105 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **DataPlatforms** (676 symbols, 1915 relationships, 54 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -17,7 +17,7 @@ This project is indexed by GitNexus as **DataPlatforms-test** (1357 symbols, 382
 
 1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
 2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
-3. `READ gitnexus://repo/DataPlatforms-test/process/{processName}` — trace the full execution flow step by step
+3. `READ gitnexus://repo/DataPlatforms/process/{processName}` — trace the full execution flow step by step
 4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
 
 ## When Refactoring
@@ -56,10 +56,10 @@ This project is indexed by GitNexus as **DataPlatforms-test** (1357 symbols, 382
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/DataPlatforms-test/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/DataPlatforms-test/clusters` | All functional areas |
-| `gitnexus://repo/DataPlatforms-test/processes` | All execution flows |
-| `gitnexus://repo/DataPlatforms-test/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/DataPlatforms/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/DataPlatforms/clusters` | All functional areas |
+| `gitnexus://repo/DataPlatforms/processes` | All execution flows |
+| `gitnexus://repo/DataPlatforms/process/{name}` | Step-by-step execution trace |
 
 ## Self-Check Before Finishing
 
