@@ -6,6 +6,7 @@ from __future__ import annotations
 
 
 import json
+import re
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -82,6 +83,10 @@ class ContextMerger:
             "summary": result.summary,
             "highlights": [],
         }
+        if result.tool_name == ToolName.NEWS:
+            articles = result.structured_data.get("article_summaries")
+            if isinstance(articles, list):
+                summary_payload["structured_articles"] = articles[:5]
 
         if result.tool_name == ToolName.MARKET:
             summary_payload["highlights"] = self._market_highlights(result)
@@ -215,24 +220,36 @@ class ContextMerger:
         return highlights
 
     def _news_highlights(self, result: ToolExecutionResult) -> list[str]:
-        """Rút ra highlight ngắn từ dữ liệu news."""
+        """Rút highlight từ article_summaries (ưu tiên link + tóm tắt từng bài)."""
 
         article_summaries = result.structured_data.get("article_summaries")
-        if not isinstance(article_summaries, list):
-            return [result.summary]
+        if not isinstance(article_summaries, list) or not article_summaries:
+            summary_text = str(result.summary or "").strip()
+            return [summary_text] if summary_text else []
 
         highlights: list[str] = []
-        for item in article_summaries[:3]:
+        for index, item in enumerate(article_summaries[:5], start=1):
             if not isinstance(item, dict):
                 continue
-            title = str(item.get("title") or "").strip()
+            title = str(item.get("title") or "Bài viết").strip()
             site = str(item.get("site") or "").strip()
             summary = str(item.get("summary") or "").strip()
-            if title and site:
-                highlights.append(f"[{site}] {title}: {summary or 'Có cập nhật liên quan.'}")
-            elif summary:
-                highlights.append(summary)
-        return highlights or [result.summary]
+            try:
+                from src.agents.news_agent.summarizer import NewsSummarizer
+
+                summary = NewsSummarizer.polish_article_summary(summary, title=title, site=site)
+            except Exception:
+                summary = re.sub(r"^\[[^\]]+\]\s*", "", summary)
+            if len(summary) > 280:
+                summary = summary[:279].rstrip() + "…"
+            url = str(item.get("url") or "").strip()
+            published_at = str(item.get("published_at") or "").strip()
+            date_part = f", {published_at}" if published_at else ""
+            line = f"Bài {index}: {title} ({site}{date_part}) — {summary}"
+            if url:
+                line += f" | {url}"
+            highlights.append(line)
+        return highlights
 
     def _reports_highlights(self, result: ToolExecutionResult) -> list[str]:
         """Rút ra highlight ngắn từ dữ liệu financial reports."""

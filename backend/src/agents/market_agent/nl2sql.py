@@ -287,6 +287,38 @@ LIMIT 1
     return fallback_sql, reasoning
 
 
+def _summarize_single_market_row(row: dict[str, Any], question: str) -> str:
+    """Tóm tắt một dòng market theo câu tiếng Việt, tránh key=value."""
+
+    ticker = str(row.get("ticker") or _extract_symbol_from_question(question) or "mã").strip().upper()
+    clauses: list[str] = []
+
+    if row.get("current_price") is not None:
+        clauses.append(f"giá hiện tại {_format_scalar(row.get('current_price'))} đồng")
+    elif row.get("close") is not None:
+        clauses.append(f"giá đóng cửa {_format_scalar(row.get('close'))} đồng")
+
+    if row.get("volume") is not None:
+        clauses.append(f"khối lượng {_format_scalar(row.get('volume'))}")
+
+    trading_date = row.get("trading_date") or row.get("date") or row.get("timestamp")
+    if trading_date is not None:
+        clauses.append(f"phiên {_format_scalar(trading_date)}")
+
+    if clauses:
+        return f"{ticker}: " + ", ".join(clauses) + "."
+
+    readable_fields = [
+        (key, _format_scalar(value))
+        for key, value in row.items()
+        if value is not None and str(key).strip()
+    ]
+    if readable_fields:
+        preview = ", ".join(f"{key} {value}" for key, value in readable_fields[:4])
+        return f"Dữ liệu {ticker}: {preview}."
+    return "Chưa có đủ trường dữ liệu để mô tả kết quả market."
+
+
 def _local_answer(question: str, rows: list[dict[str, Any]]) -> str:
     if not rows:
         return "Chưa có dữ liệu phù hợp trong database để trả lời câu hỏi này."
@@ -343,8 +375,7 @@ def _local_answer(question: str, rows: list[dict[str, Any]]) -> str:
         ).replace("xuống/lên", "lên" if price_change >= 0 else "xuống")
 
     if len(rows) == 1:
-        details = ", ".join(f"{key}={_format_scalar(value)}" for key, value in first.items())
-        return f"Kết quả phù hợp nhất là: {details}."
+        return _summarize_single_market_row(first, question)
 
     if "top" in lower_question or "nhiều nhất" in lower_question:
         preview = "; ".join(

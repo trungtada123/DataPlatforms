@@ -11,12 +11,15 @@ from .base import get_base_settings, load_environment
 from .llm import get_llm_settings
 
 
-DEFAULT_TRUSTED_SITES = (
+# Thứ tự = độ ưu tiên nguồn (index nhỏ = ưu tiên cao). Alias TRUSTED_SITES trong code cũ.
+SOURCE_PRIORITY = (
+    "vietstock.vn",
     "cafef.vn",
-    "vnexpress.net",
     "dnse.com.vn",
+    "vnexpress.net",
     "thanhnien.vn",
 )
+DEFAULT_TRUSTED_SITES = SOURCE_PRIORITY
 
 
 def split_news_csv(raw: str | None, fallback: tuple[str, ...]) -> tuple[str, ...]:
@@ -59,6 +62,9 @@ class NewsSettings:
     minio_prefix: str = "news"
     search_candidate_limit: int = 20
     cache_ttl_hours: int = 24
+    default_search_timelimit: str | None = "w"
+    max_article_age_days: int = 120
+    search_extra_results_per_site: int = 5
 
     @property
     def tzinfo(self) -> ZoneInfo:
@@ -90,6 +96,9 @@ def get_news_settings(settings: object | None = None) -> NewsSettings:
         max_results_per_site=int(os.getenv("NEWS_MAX_RESULTS_PER_SITE", "2")),
         max_articles_to_crawl=int(os.getenv("NEWS_MAX_ARTICLES_TO_CRAWL", "5")),
         cache_ttl_hours=int(os.getenv("NEWS_CACHE_TTL_HOURS", "24")),
+        default_search_timelimit=os.getenv("NEWS_DEFAULT_SEARCH_TIMELIMIT", "w").strip().lower() or "w",
+        max_article_age_days=int(os.getenv("NEWS_MAX_ARTICLE_AGE_DAYS", "120")),
+        search_extra_results_per_site=int(os.getenv("NEWS_SEARCH_EXTRA_RESULTS", "5")),
         crawl_timeout_ms=int(os.getenv("NEWS_CRAWL_TIMEOUT_MS", "20000")),
         crawl_word_count_threshold=int(os.getenv("NEWS_CRAWL_WORD_COUNT_THRESHOLD", "80")),
         max_article_chars=int(os.getenv("NEWS_MAX_ARTICLE_CHARS", "5000")),
@@ -119,6 +128,10 @@ def get_news_settings(settings: object | None = None) -> NewsSettings:
         raise ValueError("NEWS_MAX_ARTICLES_TO_CRAWL must be positive.")
     if settings.cache_ttl_hours <= 0:
         raise ValueError("NEWS_CACHE_TTL_HOURS must be positive.")
+    if settings.max_article_age_days <= 0:
+        raise ValueError("NEWS_MAX_ARTICLE_AGE_DAYS must be positive.")
+    if settings.default_search_timelimit and settings.default_search_timelimit not in {"d", "w", "m", "y"}:
+        raise ValueError("NEWS_DEFAULT_SEARCH_TIMELIMIT must be one of: d, w, m, y.")
     if settings.crawl_timeout_ms <= 0:
         raise ValueError("NEWS_CRAWL_TIMEOUT_MS must be positive.")
     if settings.crawl_word_count_threshold < 0:

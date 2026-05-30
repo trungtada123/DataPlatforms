@@ -13,7 +13,14 @@ from src.core.database import get_engine
 from src.schemas.api import NewsArticleDetail, NewsCrawledArticle, NewsSearchHit, NewsToolResponse
 
 from .crawler import Crawl4aiNewsCrawler
-from .search import DuckDuckGoNewsSearch
+from .query_build import build_news_search_question, expand_entity_tokens_for_search, extract_tickers
+from .search import (
+    DuckDuckGoNewsSearch,
+    article_recency_timestamp,
+    hit_source_sort_key,
+    parse_publication_date_from_title,
+    parse_publication_date_from_url,
+)
 from .storage import (
     ArticleArtifactStorage,
     build_article_storage,
@@ -60,7 +67,9 @@ class NewsToolService:
         """Run the news tool and return the existing API response contract."""
 
         ensure_news_schema(self.engine)
-        normalized_question = " ".join(question.strip().split())
+        normalized_question = " ".join(
+            build_news_search_question(question, question).split()
+        )
         query_id = create_news_query(
             question=question,
             normalized_question=normalized_question,
@@ -82,17 +91,31 @@ class NewsToolService:
         materialized: dict[str, Any] = self._empty_materialized()
 
         try:
-            search_hits = self.search_client.search(
-                normalized_question,
-                max_results=self.settings.search_candidate_limit,
-            )
+            search_hits = self._search_with_retries(normalized_question)
             search_hits_count = len(search_hits)
-            selected_hits = self._select_top_hits(search_hits)
+            selected_hits, only_stale_candidates = self._select_top_hits(
+                search_hits,
+                question=normalized_question,
+            )
             if not selected_hits:
                 status = "no_data"
                 summary = "Chua tim thay bai viet news phu hop cho cau hoi nay."
-                limitations.append("DuckDuckGo khong tra ve ket qua phu hop.")
-                raw_response = {"search_hits": [], "selected_hits": [], "article_summaries": []}
+                if only_stale_candidates:
+                    limitations.append(
+                        f"Không có tin trong {self.settings.max_article_age_days} ngày gần nhất; "
+                        "kết quả search chỉ gồm bài cũ hơn ngưỡng."
+                    )
+                elif search_hits_count > 0:
+                    limitations.append(
+                        "DuckDuckGo có kết quả nhưng không chọn được link bài viết hợp lệ để crawl."
+                    )
+                else:
+                    limitations.append("DuckDuckGo không trả về kết quả phù hợp.")
+                raw_response = {
+                    "search_hits": [hit.model_dump() for hit in search_hits],
+                    "selected_hits": [],
+                    "article_summaries": [],
+                }
                 return self._finalize_response(
                     query_id=query_id,
                     run_id=run_id,
@@ -113,50 +136,24 @@ class NewsToolService:
             if not article_payloads:
                 status = "no_data"
                 summary = "Khong crawl hoac doc cache duoc bai viet nao tu ket qua search hien co."
-                limitations.append("Tat ca link deu loi hoac khong doc duoc noi dung.")
+                limitations.append("Tất cả link đều lỗi hoặc không đọc được nội dung.")
             else:
                 article_summaries = self.summarizer.summarize_articles(question, article_payloads)
-                summarized_count = len(article_summaries)
-                selected_article_summaries = self.summarizer.select_relevant_summaries(question, article_summaries)
-
-                if not selected_article_summaries:
-                    fallback_summaries = self._fallback_summaries(article_summaries, limit=3)
-                    if fallback_summaries:
-                        selected_article_summaries = fallback_summaries
-                        article_payloads = self._filter_payloads_to_selected(article_payloads, selected_article_summaries)
-                        limitations.append(
-                            "No article passed strict selection; returned fallback top summarized articles."
-                        )
-                        limitations.append(
-                            "Cac ket qua search/crawl hien co khong chua bai bam sat thuc the trong cau hoi."
-                        )
-                        limitations.append(
-                            "CÃ¡c káº¿t quáº£ search/crawl hiá»‡n cÃ³ khÃ´ng chá»©a bÃ i bÃ¡m sÃ¡t thá»±c thá»ƒ trong cÃ¢u há»i."
-                        )
-                        limitations.append(
-                            "Các kết quả search/crawl hiện có không chứa bài bám sát thực thể trong câu hỏi."
-                        )
-                        summary = self.summarizer.synthesize(question, selected_article_summaries)
-                        status = "success"
-                    else:
-                        article_payloads = []
-                        summary = "Khong tim thay bai viet nao de cap truc tiep den thuc the duoc hoi."
-                        limitations.append("Cac ket qua search/crawl hien co khong bam sat cau hoi.")
-                        status = "no_data"
-                else:
-                    article_payloads = self._filter_payloads_to_selected(article_payloads, selected_article_summaries)
-                    filtered_count = summarized_count - len(selected_article_summaries)
-                    if filtered_count > 0:
-                        limitations.append(f"Da loai {filtered_count} bai it lien quan khoi phan tong hop cuoi.")
-                        limitations.append(
-                            f"ÄÃ£ loáº¡i {filtered_count} bÃ i Ã­t liÃªn quan khá»i pháº§n tá»•ng há»£p cuá»‘i."
-                        )
-                        limitations.append(f"Đã loại {filtered_count} bài ít liên quan khỏi phần tổng hợp cuối.")
-                    summary = self.summarizer.synthesize(question, selected_article_summaries)
-                    status = "success"
+                selected_article_summaries = article_summaries[: self.settings.max_articles_to_crawl]
+                article_payloads = self._filter_payloads_to_selected(
+                    article_payloads,
+                    selected_article_summaries,
+                )
+                summary = self.summarizer.synthesize_branch_summary(
+                    question,
+                    selected_article_summaries,
+                )
+                status = "success"
 
                 if any(article.status != "success" for article in article_payloads):
-                    limitations.append("Mot so link khong crawl day du nen da dung snippet hoac noi dung rut gon.")
+                    limitations.append(
+                        "Một số link không crawl đầy đủ nên đã dùng snippet hoặc nội dung rút gọn."
+                    )
 
             visible_article_summaries = (
                 selected_article_summaries
@@ -187,7 +184,7 @@ class NewsToolService:
         except Exception as exc:  # noqa: BLE001
             status = "error"
             summary = "News tool khong xu ly duoc query hien tai."
-            limitations.append("News pipeline gap loi khi search/crawl/summarize.")
+            limitations.append("Pipeline tin tức gặp lỗi khi search/crawl/summarize.")
             raw_response = {"error": str(exc)}
             return self._finalize_response(
                 query_id=query_id,
@@ -241,29 +238,135 @@ class NewsToolService:
             "selected_articles": selected_articles_count,
         }
 
-    def _select_top_hits(self, hits: list[NewsSearchHit]) -> list[NewsSearchHit]:
+    def _search_with_retries(self, question: str) -> list[NewsSearchHit]:
+        """Gom kết quả DDG: ưu tiên một lượt search đầy đủ, bổ sung nhẹ khi thiếu bài mới."""
+
+        merged = self._run_search(question, compact_queries=False)
+        selected, only_stale = self._select_top_hits(merged, question=question)
+        if selected:
+            return merged
+
+        if only_stale or not merged:
+            extra = self._run_search(question, timelimit="w", compact_queries=True)
+            merged = self._merge_search_hits(merged, extra)
+            selected, _only_stale = self._select_top_hits(merged, question=question)
+            if selected:
+                return merged
+
+        if not merged:
+            extra = self._run_search(question, timelimit="m", compact_queries=True)
+            merged = self._merge_search_hits(merged, extra)
+
+        return merged
+
+    def _run_search(
+        self,
+        question: str,
+        *,
+        timelimit: str | None = None,
+        compact_queries: bool = False,
+    ) -> list[NewsSearchHit]:
+        kwargs: dict[str, Any] = {"max_results": self.settings.search_candidate_limit}
+        if isinstance(self.search_client, DuckDuckGoNewsSearch):
+            if timelimit:
+                kwargs["timelimit"] = timelimit
+            if compact_queries:
+                kwargs["compact_queries"] = True
+        return self.search_client.search(question, **kwargs)
+
+    @staticmethod
+    def _merge_search_hits(
+        primary: list[NewsSearchHit],
+        extra: list[NewsSearchHit],
+    ) -> list[NewsSearchHit]:
+        seen: set[str] = set()
+        merged: list[NewsSearchHit] = []
+        for hit in [*primary, *extra]:
+            key = canonicalize_url(hit.normalized_url or hit.url)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(hit)
+        return merged
+
+    @staticmethod
+    def _entity_tokens_for_selection(question: str) -> list[str]:
+        tickers = extract_tickers(question)
+        seed = [ticker.lower() for ticker in tickers]
+        return expand_entity_tokens_for_search(seed)
+
+    def _select_top_hits(
+        self,
+        hits: list[NewsSearchHit],
+        *,
+        question: str = "",
+    ) -> tuple[list[NewsSearchHit], bool]:
         deduped: dict[str, NewsSearchHit] = {}
         for hit in hits:
             canonical_url = canonicalize_url(hit.normalized_url or hit.url)
             if canonical_url in deduped:
                 continue
+            url_date = parse_publication_date_from_url(canonical_url)
+            title_date = parse_publication_date_from_title(hit.title)
+            resolved_published_at = hit.published_at
+            if not resolved_published_at:
+                if url_date:
+                    resolved_published_at = url_date.date().isoformat()
+                elif title_date:
+                    resolved_published_at = title_date.date().isoformat()
             deduped[canonical_url] = hit.model_copy(
                 update={
                     "normalized_url": canonical_url,
+                    "published_at": resolved_published_at,
                     "metadata": {
                         **hit.metadata,
                         "canonical_url": canonical_url,
                         "url_hash": url_hash(canonical_url),
+                        "recency_timestamp": article_recency_timestamp(
+                            url=canonical_url,
+                            published_at=resolved_published_at,
+                            title=hit.title,
+                            snippet=hit.snippet,
+                        ),
                     },
                 }
             )
 
-        def sort_key(hit: NewsSearchHit) -> tuple[float, int]:
-            parsed = self._parse_published_at(hit.published_at)
-            timestamp = parsed.timestamp() if parsed else 0.0
-            return (timestamp, -hit.position)
+        max_age_seconds = self.settings.max_article_age_days * 86400
+        cutoff_ts = datetime.now(timezone.utc).timestamp() - max_age_seconds
 
-        return sorted(deduped.values(), key=sort_key, reverse=True)[: self.settings.max_articles_to_crawl]
+        def recency_ts(hit: NewsSearchHit) -> float:
+            metadata = hit.metadata if isinstance(hit.metadata, dict) else {}
+            timestamp = float(metadata.get("recency_timestamp") or 0.0)
+            if timestamp > 0:
+                return timestamp
+            return article_recency_timestamp(
+                url=hit.normalized_url or hit.url,
+                published_at=hit.published_at,
+                title=hit.title,
+            )
+
+        site_order = self.settings.trusted_sites
+        ordered = sorted(
+            deduped.values(),
+            key=lambda hit: hit_source_sort_key(hit, site_order=site_order),
+        )
+        dated_hits = [hit for hit in ordered if recency_ts(hit) > 0]
+        fresh_hits = [hit for hit in dated_hits if recency_ts(hit) >= cutoff_ts]
+        entity_tokens = self._entity_tokens_for_selection(question) if question else []
+        if entity_tokens and fresh_hits:
+            relevant_fresh = [
+                hit
+                for hit in fresh_hits
+                if DuckDuckGoNewsSearch._score_hit_relevance(hit, entity_tokens) > 0
+            ]
+            if relevant_fresh:
+                fresh_hits = relevant_fresh
+        if fresh_hits:
+            return fresh_hits[: self.settings.max_articles_to_crawl], False
+
+        only_stale = bool(dated_hits)
+        return [], only_stale
 
     def _materialize_articles(
         self,

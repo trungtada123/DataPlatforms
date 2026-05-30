@@ -104,5 +104,17 @@ def route(state: OrchestrationState) -> dict[str, Any]:
         mapped=_TOOL_NAME_MAP.get(request.tool_name.value)
         if mapped and mapped in _ALLOWED_TOOLS and mapped not in selected_tools: selected_tools.append(mapped)
     if _should_force_news_only(str(state.get("query", "")), plan_payload, selected_tools): selected_tools=["news"]
-    trace.append({"step":"router","status":"ok","detail":"Tool routing completed.","metadata":{"requested_tools":[tool.value for tool in router.requested_tools(plan)],"selected_tools":list(selected_tools),"unsupported_tools":[tool.value for tool in router.unsupported_tools(plan)]}})
+    selected_label = ", ".join(selected_tools) if selected_tools else "không có"
+    trace.append(
+        {
+            "step": "router",
+            "status": "ok",
+            "detail": f"Đã chọn công cụ: {selected_label}.",
+            "metadata": {
+                "requested_tools": [tool.value for tool in router.requested_tools(plan)],
+                "selected_tools": list(selected_tools),
+                "unsupported_tools": [tool.value for tool in router.unsupported_tools(plan)],
+            },
+        }
+    )
     return {"selected_tools":selected_tools,"trace":trace,"errors":errors,"metadata":metadata}

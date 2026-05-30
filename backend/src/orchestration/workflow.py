@@ -454,6 +454,8 @@ def _default_intent_plan(query: str) -> IntentPlan:
 
 
 def _collect_limitations(state: OrchestrationState, errors: list[str]) -> list[str]:
+    from src.utils.text import dedupe_limitations
+
     limitations: list[str] = []
     for key in ("market_result", "news_result", "financial_result"):
         agent_result = state.get(key)
@@ -461,13 +463,13 @@ def _collect_limitations(state: OrchestrationState, errors: list[str]) -> list[s
             continue
         for item in agent_result.limitations:
             normalized = str(item).strip()
-            if normalized and normalized not in limitations:
+            if normalized:
                 limitations.append(normalized)
     for item in errors:
         normalized = str(item).strip()
-        if normalized and normalized not in limitations:
+        if normalized:
             limitations.append(normalized)
-    return limitations
+    return dedupe_limitations(limitations)
 
 
 def _resolve_status(

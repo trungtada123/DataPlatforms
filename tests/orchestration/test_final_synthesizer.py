@@ -86,6 +86,6 @@ class FinalSynthesizerTests(TestCase):
 
         self.assertTrue(result.used_fallback)
         self.assertEqual(result.model_name, "deterministic-fallback")
-        self.assertIn("Các điểm ủng hộ hiện có", result.answer)
-        self.assertIn("Rủi ro và điểm cần thận trọng", result.answer)
+        self.assertIn("## Điểm ủng hộ", result.answer)
+        self.assertIn("## Rủi ro", result.answer)
 

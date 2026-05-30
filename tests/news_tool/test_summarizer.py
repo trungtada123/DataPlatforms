@@ -93,14 +93,17 @@ class NewsSummarizerTests(TestCase):
             },
         ]
 
-        summary = summarizer.synthesize("Tin gần đây của ACB có gì đáng chú ý?", article_summaries)
+        summary = summarizer.synthesize_branch_summary(
+            "Tin gần đây của ACB có gì đáng chú ý?",
+            article_summaries,
+        )
 
-        self.assertIn("Các ý đáng chú ý từ các bài đã chọn", summary)
+        self.assertIn("## Tóm tắt", summary)
+        self.assertIn("## Các bài đã crawl", summary)
         self.assertIn("134 triệu USD", summary)
         self.assertIn("đồng sáng lập ACB", summary)
-        self.assertIn("Nguồn tham khảo:", summary)
-        self.assertIn("https://e.vnexpress.net/news/business/companies/lender-acb-profits-skyrocket-4259121.html", summary)
-        self.assertIn("https://e.vnexpress.net/news/business/companies/asia-commercial-bank-co-founder-passes-away-4740712.html", summary)
+        self.assertIn("- Link: https://e.vnexpress.net/news/business/companies/lender-acb-profits-skyrocket-4259121.html", summary)
+        self.assertIn("- Link: https://e.vnexpress.net/news/business/companies/asia-commercial-bank-co-founder-passes-away-4740712.html", summary)
 
     def test_format_final_summary_breaks_numbered_points_into_new_lines(self) -> None:
         summarizer = NewsSummarizer(self._build_settings())
@@ -118,31 +121,24 @@ class NewsSummarizerTests(TestCase):
         self.assertIn("\n3. Cựu CEO có thể vào HĐQT mới.", formatted)
         self.assertIn("\n\nHạn chế: Thông tin còn ngắn.", formatted)
 
-    def test_append_source_links_lists_each_article_url_once(self) -> None:
+    def test_format_article_block_includes_link_and_metadata(self) -> None:
         summarizer = NewsSummarizer(self._build_settings())
 
-        article_summaries = [
+        block = summarizer._format_article_block(
+            1,
             {
-                "article_id": "article-1",
                 "title": "FPT nhận bằng sáng chế AI",
                 "site": "vnexpress.net",
                 "url": "https://vnexpress.net/fpt-nhan-bang-sang-che-ai-123.html",
+                "published_at": "2026-05-29",
                 "summary": "FPT nhận bằng sáng chế quốc tế.",
             },
-            {
-                "article_id": "article-2",
-                "title": "FPT Play bổ sung phim dịp lễ",
-                "site": "vnexpress.net",
-                "url": "https://vnexpress.net/fpt-play-bo-sung-phim-456.html",
-                "summary": "FPT Play thêm nhiều phim mới.",
-            },
-        ]
+        )
 
-        summary = summarizer._append_source_links("Tóm tắt:\n1. FPT có tin mới.", article_summaries)
-
-        self.assertIn("Nguồn tham khảo:", summary)
-        self.assertIn("- vnexpress.net: FPT nhận bằng sáng chế AI -> https://vnexpress.net/fpt-nhan-bang-sang-che-ai-123.html", summary)
-        self.assertIn("- vnexpress.net: FPT Play bổ sung phim dịp lễ -> https://vnexpress.net/fpt-play-bo-sung-phim-456.html", summary)
+        self.assertIn("### 1. FPT nhận bằng sáng chế AI", block)
+        self.assertIn("- Nguồn: vnexpress.net", block)
+        self.assertIn("- Ngày đăng: 2026-05-29", block)
+        self.assertIn("- Link: https://vnexpress.net/fpt-nhan-bang-sang-che-ai-123.html", block)
 
     def test_select_relevant_summaries_dedupes_canonical_urls(self) -> None:
         summarizer = NewsSummarizer(self._build_settings())
@@ -273,6 +269,13 @@ class NewsSummarizerTests(TestCase):
         self.assertGreaterEqual(len(selected), 1)
         self.assertEqual(selected[0]["article_id"], "negative")
 
+    def test_negative_intent_not_triggered_by_lo_substring_in_title(self) -> None:
+        summarizer = NewsSummarizer(self._build_settings())
+        normalized = summarizer._normalize_free_text(
+            "Hoa Phat bat ngo trinh phuong an khong tra co tuc tien mat truoc lo ngai"
+        )
+        self.assertFalse(summarizer._has_negative_news_intent(normalized))
+
     def test_negative_query_without_negative_article_adds_clear_message(self) -> None:
         summarizer = NewsSummarizer(self._build_settings())
         question = "Có tin tức tiêu cực nào gần đây về FPT không?"
@@ -288,9 +291,14 @@ class NewsSummarizerTests(TestCase):
             }
         ]
 
-        summary = summarizer.synthesize(question, article_summaries)
+        summary = summarizer.synthesize_branch_summary(question, article_summaries)
 
-        self.assertIn("Không tìm thấy đủ tin tiêu cực rõ ràng", summary)
+        self.assertIn("## Các bài đã crawl", summary)
+        self.assertIn("- Link: https://vnexpress.net/fpt-giao-duc-888888.html", summary)
+        self.assertTrue(
+            "tin tiêu cực rõ ràng" in summary.lower()
+            or "Chưa thấy tin tiêu cực" in summary
+        )
 
     def test_selection_returns_max_five_articles(self) -> None:
         summarizer = NewsSummarizer(self._build_settings())

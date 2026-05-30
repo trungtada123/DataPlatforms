@@ -19,12 +19,14 @@ class FakeSearchClient:
     def search(self, question: str, *, max_results: int | None = None):  # type: ignore[no-untyped-def]
         return [
             NewsSearchHit(
-                url="https://cafef.vn/acb-cap-nhat-123456.chn",
-                normalized_url="https://cafef.vn/acb-cap-nhat-123456.chn",
+                url="https://cafef.vn/acb-cap-nhat-188260528170618458.chn",
+                normalized_url="https://cafef.vn/acb-cap-nhat-188260528170618458.chn",
                 title="ACB cập nhật hoạt động",
                 snippet="ACB vừa công bố thông tin mới.",
                 site="cafef.vn",
                 position=1,
+                published_at="2026-05-28",
+                metadata={"source_priority": 0, "rank_in_source": 1},
             )
         ]
 
@@ -69,6 +71,9 @@ class FakeSummarizer:
     def synthesize(self, question, article_summaries):  # type: ignore[no-untyped-def]
         return "[cafef.vn] ACB công bố tăng trưởng tín dụng và kế hoạch năm 2026."
 
+    def synthesize_branch_summary(self, question, article_summaries):  # type: ignore[no-untyped-def]
+        return self.synthesize(question, article_summaries)
+
 
 class FakeMixedSearchClient:
     """Search client giả trả về cả bài liên quan và không liên quan."""
@@ -76,82 +81,89 @@ class FakeMixedSearchClient:
     def search(self, question: str, *, max_results: int | None = None):  # type: ignore[no-untyped-def]
         return [
             NewsSearchHit(
-                url="https://cafef.vn/acb-cap-nhat-123456.chn",
-                normalized_url="https://cafef.vn/acb-cap-nhat-123456.chn",
+                url="https://cafef.vn/acb-cap-nhat-188260528170618458.chn",
+                normalized_url="https://cafef.vn/acb-cap-nhat-188260528170618458.chn",
                 title="ACB cập nhật hoạt động",
                 snippet="ACB vừa công bố thông tin mới.",
                 site="cafef.vn",
                 position=1,
+                published_at="2026-05-28",
+                metadata={"source_priority": 0, "rank_in_source": 1},
             ),
             NewsSearchHit(
-                url="https://cafef.vn/hpg-cap-nhat-654321.chn",
-                normalized_url="https://cafef.vn/hpg-cap-nhat-654321.chn",
+                url="https://cafef.vn/hpg-cap-nhat-188260527170618457.chn",
+                normalized_url="https://cafef.vn/hpg-cap-nhat-188260527170618457.chn",
                 title="HPG cập nhật sản lượng thép",
                 snippet="HPG vừa công bố sản lượng mới.",
                 site="cafef.vn",
                 position=2,
+                published_at="2026-05-27",
+                metadata={"source_priority": 0, "rank_in_source": 2},
             ),
         ]
 
 
 class FakeMixedCrawler:
-    """Crawler giả trả về hai bài đã được làm sạch."""
+    """Crawler giả trả về bài theo số hit đã chọn."""
 
     def crawl_hits(self, hits):  # type: ignore[no-untyped-def]
-        return [
-            NewsCrawledArticle(
-                url=hits[0].url,
-                normalized_url=hits[0].url,
-                url_hash="hash-1",
-                title=hits[0].title,
-                site=hits[0].site,
-                position=1,
-                snippet=hits[0].snippet,
-                status="success",
-                cleaned_text="ACB công bố tăng trưởng tín dụng và kế hoạch năm 2026.",
-                cleaned_excerpt="ACB công bố tăng trưởng tín dụng.",
+        bodies = {
+            "ACB": (
+                "ACB công bố tăng trưởng tín dụng và kế hoạch năm 2026.",
+                "ACB công bố tăng trưởng tín dụng.",
             ),
-            NewsCrawledArticle(
-                url=hits[1].url,
-                normalized_url=hits[1].url,
-                url_hash="hash-2",
-                title=hits[1].title,
-                site=hits[1].site,
-                position=2,
-                snippet=hits[1].snippet,
-                status="success",
-                cleaned_text="HPG báo sản lượng thép tăng trong quý 1.",
-                cleaned_excerpt="HPG báo sản lượng thép tăng.",
+            "HPG": (
+                "HPG báo sản lượng thép tăng trong quý 1.",
+                "HPG báo sản lượng thép tăng.",
             ),
-        ]
+        }
+        articles: list[NewsCrawledArticle] = []
+        for index, hit in enumerate(hits, start=1):
+            ticker = "ACB" if "ACB" in hit.title.upper() else "HPG"
+            cleaned_text, cleaned_excerpt = bodies[ticker]
+            articles.append(
+                NewsCrawledArticle(
+                    url=hit.url,
+                    normalized_url=hit.url,
+                    url_hash=f"hash-{index}",
+                    title=hit.title,
+                    site=hit.site,
+                    position=index,
+                    snippet=hit.snippet,
+                    status="success",
+                    cleaned_text=cleaned_text,
+                    cleaned_excerpt=cleaned_excerpt,
+                )
+            )
+        return articles
 
 
 class FakeFilteringSummarizer:
     """Summarizer giả mô phỏng bước lọc bài liên quan."""
 
     def summarize_articles(self, question, articles):  # type: ignore[no-untyped-def]
-        return [
-            {
-                "article_id": articles[0].article_id,
-                "title": articles[0].title,
-                "site": articles[0].site,
-                "url": articles[0].url,
-                "summary": "[cafef.vn] ACB công bố tăng trưởng tín dụng.",
-            },
-            {
-                "article_id": articles[1].article_id,
-                "title": articles[1].title,
-                "site": articles[1].site,
-                "url": articles[1].url,
-                "summary": "[cafef.vn] HPG báo sản lượng thép tăng.",
-            },
-        ]
+        summaries = []
+        for article in articles:
+            label = "ACB" if "ACB" in article.title.upper() else "HPG"
+            summaries.append(
+                {
+                    "article_id": article.article_id,
+                    "title": article.title,
+                    "site": article.site,
+                    "url": article.url,
+                    "summary": f"[cafef.vn] {label} tóm tắt ngắn.",
+                }
+            )
+        return summaries
 
     def select_relevant_summaries(self, question, article_summaries):  # type: ignore[no-untyped-def]
         return [item for item in article_summaries if "ACB" in item["title"]]
 
     def synthesize(self, question, article_summaries):  # type: ignore[no-untyped-def]
         return "ACB công bố tăng trưởng tín dụng."
+
+    def synthesize_branch_summary(self, question, article_summaries):  # type: ignore[no-untyped-def]
+        return self.synthesize(question, article_summaries)
 
 
 class FakeNoRelevantSummarizer:
@@ -160,19 +172,13 @@ class FakeNoRelevantSummarizer:
     def summarize_articles(self, question, articles):  # type: ignore[no-untyped-def]
         return [
             {
-                "article_id": articles[0].article_id,
-                "title": articles[0].title,
-                "site": articles[0].site,
-                "url": articles[0].url,
+                "article_id": article.article_id,
+                "title": article.title,
+                "site": article.site,
+                "url": article.url,
                 "summary": "[cafef.vn] HPG báo sản lượng thép tăng.",
-            },
-            {
-                "article_id": articles[1].article_id,
-                "title": articles[1].title,
-                "site": articles[1].site,
-                "url": articles[1].url,
-                "summary": "[cafef.vn] HPG báo sản lượng thép tăng.",
-            },
+            }
+            for article in articles
         ]
 
     def select_relevant_summaries(self, question, article_summaries):  # type: ignore[no-untyped-def]
@@ -180,6 +186,9 @@ class FakeNoRelevantSummarizer:
 
     def synthesize(self, question, article_summaries):  # type: ignore[no-untyped-def]
         return "Không nên được gọi khi không còn bài liên quan."
+
+    def synthesize_branch_summary(self, question, article_summaries):  # type: ignore[no-untyped-def]
+        return "## Tóm tắt\nTin HPG.\n\n## Các bài đã crawl\n### 1. HPG"
 
 
 class FakeSnippetOnlyCrawler:
@@ -413,7 +422,7 @@ class NewsToolServiceTests(TestCase):
                 for index in range(10)
             ]
 
-        selected = service._select_top_hits(hits)
+        selected, _used_stale = service._select_top_hits(hits)
         self.assertEqual(len(selected), 5)
         self.assertEqual([item.title for item in selected], ["HPG 9", "HPG 8", "HPG 7", "HPG 6", "HPG 5"])
 
@@ -720,11 +729,10 @@ class NewsToolServiceTests(TestCase):
         self.assertEqual(response.status, "success")
         self.assertEqual(len(response.article_summaries), 1)
         self.assertEqual(len(response.articles), 1)
-        self.assertEqual(response.articles[0].article_id, "article-1")
-        self.assertEqual(response.stats["selected_articles"], 1)
-        self.assertTrue(any("Đã loại 1 bài ít liên quan" in item for item in response.limitations))
+        self.assertIn("ACB", response.article_summaries[0]["title"])
+        self.assertFalse(any("Đã loại" in item for item in response.limitations))
 
-    def test_ask_returns_fallback_articles_when_no_relevant_articles_remain(self) -> None:
+    def test_ask_keeps_all_crawled_articles_without_post_filter_limitation(self) -> None:
         with TemporaryDirectory() as temp_dir:
             settings = NewsToolSettings(
                 storage_backend="filesystem",
@@ -787,7 +795,10 @@ class NewsToolServiceTests(TestCase):
             ):
                 response = service.ask("Tin gần đây của ACB có gì đáng chú ý?")
 
-        self.assertTrue(any("không chứa bài bám sát thực thể" in item for item in response.limitations))
+        self.assertEqual(response.status, "success")
+        self.assertEqual(len(response.article_summaries), 1)
+        self.assertIn("## Các bài đã crawl", response.summary)
+        self.assertFalse(any("Đã loại" in item for item in response.limitations))
 
     def test_ask_returns_success_when_snippet_fallback_still_produces_summary(self) -> None:
         with TemporaryDirectory() as temp_dir:

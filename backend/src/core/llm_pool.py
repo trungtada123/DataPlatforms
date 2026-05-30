@@ -22,6 +22,7 @@ class GeminiSettingsLike(Protocol):
     google_api_key: str
     google_api_keys: list[str]
     gemini_model: str
+    gemini_timeout_seconds: int
     gemini_max_retries: int
     gemini_retry_delay_seconds: float
 
@@ -92,7 +93,14 @@ class GeminiKeyPool:
                         model_name=self.settings.gemini_model,
                         generation_config=self.generation_config,
                     )
-                    response = model.generate_content(prompt)
+                    timeout_seconds = max(
+                        1,
+                        int(getattr(self.settings, "gemini_timeout_seconds", 120) or 120),
+                    )
+                    response = model.generate_content(
+                        prompt,
+                        request_options={"timeout": timeout_seconds},
+                    )
                     if self.after_success is not None:
                         self.after_success(api_key)
                     return response.text or ""

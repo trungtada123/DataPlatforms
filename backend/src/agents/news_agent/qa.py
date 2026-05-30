@@ -9,6 +9,7 @@ from typing import Any
 
 from src.schemas.orchestration import AgentResult, IntentPlan, ToolExecutionResult, ToolExecutionStatus, ToolName
 
+from .query_build import build_news_search_question
 from .service import NewsToolService
 
 
@@ -23,8 +24,9 @@ def normalize_news_tool_query(value: Any, original_query: str | None = None) -> 
         text = str(parsed or "").strip()
 
     if not text:
-        return fallback
-    return " ".join(text.split())
+        return build_news_search_question("", fallback) or fallback
+    normalized = build_news_search_question(text, fallback or "")
+    return " ".join((normalized or text).split())
 
 
 def _coerce_news_query_payload(value: Any) -> Any:

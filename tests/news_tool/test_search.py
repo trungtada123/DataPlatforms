@@ -7,7 +7,14 @@ from unittest import TestCase
 
 from src.config.news import NewsToolSettings
 from src.schemas.api import NewsSearchHit
-from src.agents.news_agent.search import DuckDuckGoNewsSearch
+from src.agents.news_agent.search import (
+    DuckDuckGoNewsSearch,
+    infer_timelimit,
+    is_article_url,
+    parse_publication_date_from_url,
+    resolve_timelimit,
+    site_priority_rank,
+)
 
 
 class DuckDuckGoNewsSearchTests(TestCase):
@@ -99,6 +106,100 @@ class DuckDuckGoNewsSearchTests(TestCase):
 
         self.assertFalse(self.search._is_relevant_hit(misleading_hit, entity_tokens))
         self.assertTrue(self.search._is_relevant_hit(relevant_hit, entity_tokens))
+
+    def test_resolve_timelimit_defaults_to_month_for_latest_intent(self) -> None:
+        self.assertEqual(resolve_timelimit("Thông tin mới nhất của FPT"), "m")
+        self.assertEqual(resolve_timelimit("Thông tin mới nhất của FPT"), "m")
+        self.assertEqual(resolve_timelimit("tin tức HPG hôm nay"), "d")
+        self.assertEqual(infer_timelimit("tin tức HPG hôm nay"), "d")
+
+    def test_site_priority_prefers_vietstock_over_other_domains(self) -> None:
+        order = ("vietstock.vn", "cafef.vn", "dnse.com.vn", "vnexpress.net", "thanhnien.vn")
+        self.assertLess(site_priority_rank("vietstock.vn", site_order=order), site_priority_rank("cafef.vn", site_order=order))
+        self.assertLess(site_priority_rank("cafef.vn", site_order=order), site_priority_rank("dnse.com.vn", site_order=order))
+        self.assertLess(site_priority_rank("dnse.com.vn", site_order=order), site_priority_rank("vnexpress.net", site_order=order))
+
+    def test_finalize_hits_orders_by_site_priority_then_recency(self) -> None:
+        order = ("vietstock.vn", "cafef.vn", "dnse.com.vn", "vnexpress.net", "thanhnien.vn")
+        deduped = {
+            "https://www.dnse.com.vn/senses/tin-tuc/hpg-moi-35111111": (
+                10,
+                NewsSearchHit(
+                    url="https://www.dnse.com.vn/senses/tin-tuc/hpg-moi-35111111",
+                    normalized_url="https://www.dnse.com.vn/senses/tin-tuc/hpg-moi-35111111",
+                    title="HPG dnse",
+                    snippet="",
+                    site="dnse.com.vn",
+                    position=1,
+                    published_at="2026-05-28",
+                    metadata={"source_priority": 2, "rank_in_source": 1},
+                ),
+            ),
+            "https://cafef.vn/hpg-tin-moi-188260528170618458.chn": (
+                5,
+                NewsSearchHit(
+                    url="https://cafef.vn/hpg-tin-moi-188260528170618458.chn",
+                    normalized_url="https://cafef.vn/hpg-tin-moi-188260528170618458.chn",
+                    title="HPG cafef",
+                    snippet="",
+                    site="cafef.vn",
+                    position=2,
+                    published_at="2026-05-27",
+                    metadata={"source_priority": 1, "rank_in_source": 1},
+                ),
+            ),
+            "https://vietstock.vn/hpg-cap-nhat-tin-moi-12345678.html": (
+                8,
+                NewsSearchHit(
+                    url="https://vietstock.vn/hpg-cap-nhat-tin-moi-12345678.html",
+                    normalized_url="https://vietstock.vn/hpg-cap-nhat-tin-moi-12345678.html",
+                    title="HPG vietstock",
+                    snippet="",
+                    site="vietstock.vn",
+                    position=3,
+                    published_at="2026-05-26",
+                    metadata={"source_priority": 0, "rank_in_source": 1},
+                ),
+            ),
+        }
+        ordered = DuckDuckGoNewsSearch._finalize_hits(deduped, 5, site_order=order)
+        self.assertEqual(ordered[0].site, "vietstock.vn")
+
+    def test_is_article_url_accepts_long_slug_paths(self) -> None:
+        self.assertTrue(
+            is_article_url(
+                "https://vietstock.vn/phan-tich-co-phieu-fpt-tang-truong-manh-trong-quy-2-2026-12345.html",
+                "vietstock.vn",
+            )
+        )
+
+    def test_parse_publication_date_from_cafef_url(self) -> None:
+        parsed = parse_publication_date_from_url(
+            "https://cafef.vn/hpg-tang-vun-vut-188230625080848229.chn"
+        )
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertEqual(parsed.year, 2023)
+        self.assertEqual(parsed.month, 6)
+        self.assertEqual(parsed.day, 25)
+
+    def test_primary_search_query_uses_entity_and_recent_wording(self) -> None:
+        query = self.search._primary_search_query(
+            "tin tức công ty cổ phần tập đoàn Hòa Phát gần đây nhất"
+        )
+        self.assertIn("Hòa Phát", query)
+        self.assertIn("tin tức", query.lower())
+
+    def test_is_article_url_rejects_listing_pages(self) -> None:
+        self.assertFalse(
+            is_article_url("https://cafef.vn/tin-moi", "cafef.vn"),
+        )
+        self.assertTrue(
+            is_article_url(
+                "https://cafef.vn/acb-cap-nhat-188260416123456.chn",
+                "cafef.vn",
+            ),
+        )
 
     def test_negative_fpt_query_candidates_include_vietnamese_terms(self) -> None:
         candidates = self.search._build_query_candidates("Có tin tức tiêu cực nào gần đây về FPT không?")

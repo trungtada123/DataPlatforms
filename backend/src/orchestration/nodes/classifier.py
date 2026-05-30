@@ -225,12 +225,10 @@ def _build_fallback_tool_queries(
             continue
 
         if tool == ToolName.NEWS:
-            if primary_company and "bank" in primary_company.lower():
-                tool_queries[tool.value] = f"recent news about bank {primary_ticker or primary_company}"
-            elif primary_ticker:
-                tool_queries[tool.value] = f"recent news about {primary_ticker}"
+            if primary_ticker:
+                tool_queries[tool.value] = f"tin tức {primary_ticker} mới nhất"
             elif primary_company:
-                tool_queries[tool.value] = f"recent news about {primary_company}"
+                tool_queries[tool.value] = f"tin tức {primary_company} mới nhất"
             else:
                 tool_queries[tool.value] = question
             continue

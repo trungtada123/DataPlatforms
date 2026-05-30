@@ -36,24 +36,32 @@ Nội dung:
 FINAL_PROMPT_TEMPLATE = """
 Bạn là trợ lý tổng hợp tin tức chứng khoán Việt Nam.
 
-Hãy tổng hợp câu trả lời cho câu hỏi sau chỉ dựa trên các bài báo được cung cấp.
-- Trả lời bằng tiếng Việt.
-- Nêu 2-4 ý chính đáng chú ý nhất.
-- Có nhắc nguồn theo dạng [Nguồn].
-- Nếu các bài viết không đủ chắc chắn, hãy nói rõ hạn chế.
-- Mỗi ý phải nằm trên một dòng riêng.
-- Dùng đúng format:
-  Tóm tắt:
-  1. ...
-  2. ...
-  3. ...
-  Hạn chế:
-  - ...
-- Không gộp tất cả ý vào một đoạn văn dài duy nhất.
+Hãy tổng hợp cho câu hỏi sau CHỈ dựa trên danh sách bài đã crawl (mỗi bài có title, url, published_at, summary).
+
+Định dạng bắt buộc (plain text, tiếng Việt):
+
+## Tóm tắt
+1-2 câu nêu ý chính chung.
+
+## Các bài đã crawl
+Với MỖI bài (giữ đủ link), dùng block:
+### [số thứ tự]. [Tiêu đề rút gọn]
+- Nguồn: [site]
+- Ngày đăng: [published_at hoặc "không rõ"]
+- Tóm tắt: [2-3 câu từ summary của bài]
+- Link: [url đầy đủ]
+
+Quy tắc:
+- Các bài đã sắp theo thứ tự ưu tiên nguồn (vietstock → cafef → dnse → vnexpress → thanhnien); nguồn đứng trước đáng tin hơn khi mâu thuẫn.
+- Không bỏ Link.
+- Không lặp cùng một bài.
+- Không chép nguyên văn markdown crawl dài.
+- Không bịa thông tin ngoài nội dung đã cho.
+- Nếu câu hỏi yêu cầu tin tiêu cực mà bài không đủ tiêu cực, nói ngắn trong ## Tóm tắt, vẫn liệt kê đủ bài.
 
 Câu hỏi: {question}
 
-Các bài viết:
+Các bài viết (JSON):
 {article_summaries}
 """
 
@@ -89,6 +97,7 @@ QUERY_STOPWORDS = {
 FINANCIAL_NEWS_DOMAINS = {
     "cafef.vn",
     "vietstock.vn",
+    "vnexpress.net",
     "ndh.vn",
     "tinnhanhchungkhoan.vn",
     "fireant.vn",
@@ -126,31 +135,28 @@ ENTERTAINMENT_NOISE_TERMS = (
     "anime",
     "dien anh",
 )
-NEGATIVE_QUERY_TERMS = (
-    "tiêu cực",
+NEGATIVE_QUERY_PHRASES = (
+    "tin tieu cuc",
     "tieu cuc",
-    "xấu",
-    "xau",
-    "rủi ro",
+    "tin xau",
     "rui ro",
-    "giảm",
-    "giam",
-    "lỗ",
-    "lo",
-    "kiện",
-    "kien",
-    "bị phạt",
     "bi phat",
-    "cảnh báo",
-    "canh bao",
-    "khó khăn",
     "kho khan",
-    "sa thải",
     "sa thai",
-    "nợ",
-    "no",
-    "tranh chấp",
     "tranh chap",
+    "canh bao",
+    "thua lo",
+    "lo rong",
+)
+SIDEBAR_LINE_PATTERN = re.compile(r"^\d{1,2}:\d{2}\s+")
+ARTICLE_SUMMARY_PREFIX_PATTERN = re.compile(r"^\[[^\]]+\]\s*")
+CAFEF_BYLINE_PATTERN = re.compile(
+    r"[^|]{0,40}\*{2,}\s*\|\s*\d{1,2}-\d{1,2}-\d{4}.*?(?:Chia sẻ\s*\d+)?",
+    flags=re.IGNORECASE,
+)
+CAFEF_STOCK_TICKER_LINE_PATTERN = re.compile(
+    r"\b[A-Z]{3,5}:\s*Công ty.*?(?=\.|$)",
+    flags=re.IGNORECASE,
 )
 NEGATIVE_SIGNAL_TERMS = (
     "lỗ",
@@ -247,7 +253,11 @@ class NewsSummarizer:
 
         summaries: list[dict[str, Any]] = []
         for article in articles:
-            summary = self._summarize_one(question, article)
+            summary = self.polish_article_summary(
+                self._summarize_one(question, article),
+                title=article.title,
+                site=article.site,
+            )
             summaries.append(
                 {
                     "article_id": article.article_id,
@@ -266,56 +276,35 @@ class NewsSummarizer:
         return summaries
 
     def synthesize(self, question: str, article_summaries: list[dict[str, Any]]) -> str:
-        """Tổng hợp câu trả lời cuối cho news-only query."""
+        """Tổng hợp câu trả lời cuối cho news-only query (giữ tương thích API cũ)."""
+
+        return self.synthesize_branch_summary(question, article_summaries)
+
+    def synthesize_branch_summary(self, question: str, article_summaries: list[dict[str, Any]]) -> str:
+        """Tổng hợp đầu ra nhánh news: tóm tắt ngắn + danh sách bài (link, tóm tắt, ngày)."""
 
         if not article_summaries:
             return "Chưa tìm thấy bài viết phù hợp để tổng hợp tin tức."
 
+        articles = article_summaries[:TOP_SELECTION_LIMIT]
         intent = self._detect_intent(question)
-        selected_summaries = self.select_relevant_summaries(question, article_summaries)
-        if intent.negative_news and not selected_summaries:
-            return (
-                "Không tìm thấy đủ tin tiêu cực rõ ràng trong các bài mới crawl được.\n"
-                "Dưới đây là các bài gần nhất và liên quan nhất để tham khảo:\n"
-                "Chưa có bài nào đáp ứng tiêu chí lọc hiện tại."
-            )
-        no_clear_negative = any(
-            "Không tìm thấy đủ tin tiêu cực rõ ràng" in str(item.get("reason_selected") or "")
-            for item in selected_summaries
-        )
-        grounded_summary = self._grounded_synthesis(selected_summaries)
-        if self._pool is None:
-            if no_clear_negative and "Không tìm thấy đủ tin tiêu cực rõ ràng" not in grounded_summary:
-                grounded_summary = (
-                    "Không tìm thấy đủ tin tiêu cực rõ ràng trong các bài mới crawl được.\n"
-                    + grounded_summary
-                )
-            return self._append_source_links(grounded_summary, selected_summaries)
 
-        prompt = FINAL_PROMPT_TEMPLATE.format(
-            question=question,
-            article_summaries=json.dumps(selected_summaries, ensure_ascii=False, indent=2),
-        )
-        try:
-            output = self._generate_with_retry(prompt)
-            cleaned = self._format_final_summary(
-                self._clean_model_text(output, preserve_lines=True)
+        if self._pool is not None:
+            prompt = FINAL_PROMPT_TEMPLATE.format(
+                question=question,
+                article_summaries=json.dumps(articles, ensure_ascii=False, indent=2),
             )
-            if cleaned and self._looks_informative(cleaned):
-                if no_clear_negative and "Không tìm thấy đủ tin tiêu cực rõ ràng" not in cleaned:
-                    cleaned = (
-                        "Không tìm thấy đủ tin tiêu cực rõ ràng trong các bài mới crawl được.\n\n"
-                        + cleaned
-                    )
-                return self._append_source_links(cleaned, selected_summaries)
-        except Exception:
-            pass
-        if no_clear_negative and "Không tìm thấy đủ tin tiêu cực rõ ràng" not in grounded_summary:
-            grounded_summary = (
-                "Không tìm thấy đủ tin tiêu cực rõ ràng trong các bài mới crawl được.\n"
-                + grounded_summary
-            )
-        return self._append_source_links(grounded_summary, selected_summaries)
+            try:
+                output = self._generate_with_retry(prompt)
+                cleaned = self._format_final_summary(
+                    self._clean_model_text(output, preserve_lines=True)
+                )
+                if cleaned and self._looks_informative(cleaned):
+                    return cleaned
+            except Exception:
+                pass
+
+        return self._grounded_branch_summary(question, articles, negative_news=intent.negative_news)
 
     def select_relevant_summaries(self, question: str, article_summaries: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Lọc các bài thực sự liên quan trước khi tổng hợp câu trả lời cuối.
@@ -503,7 +492,7 @@ class NewsSummarizer:
         normalized = self._normalize_free_text(question)
         entity_tokens = self._extract_entity_tokens(question)
 
-        negative_news = any(term in normalized for term in NEGATIVE_QUERY_TERMS)
+        negative_news = self._has_negative_news_intent(normalized)
         latest_news = any(term in normalized for term in LATEST_QUERY_TERMS)
         stock_or_company_news = bool(entity_tokens) and any(
             keyword in normalized
@@ -530,6 +519,12 @@ class NewsSummarizer:
             stock_or_company_news=stock_or_company_news,
             entity_tokens=entity_tokens,
         )
+
+    @staticmethod
+    def _has_negative_news_intent(normalized_question: str) -> bool:
+        """Chỉ bật chế độ tin tiêu cực khi người dùng hỏi rõ — tránh khớp nhầm 'lo' trong tiêu đề."""
+
+        return any(phrase in normalized_question for phrase in NEGATIVE_QUERY_PHRASES)
 
     def _build_candidates(
         self,
@@ -1039,8 +1034,56 @@ class NewsSummarizer:
 
     @staticmethod
     def _fallback_article_summary(article: NewsCrawledArticle) -> str:
-        basis = article.cleaned_excerpt or article.snippet or "Bài viết không có đủ nội dung để trích yếu."
-        return f"[{article.site}] {article.title}: {basis}"
+        basis = NewsSummarizer._extract_summary_excerpt(
+            article.cleaned_text or article.snippet or "",
+            fallback="Bài viết không có đủ nội dung để trích yếu.",
+        )
+        return basis
+
+    @staticmethod
+    def _extract_summary_excerpt(text: str, *, fallback: str, max_chars: int = 420) -> str:
+        """Lấy đoạn đầu có nghĩa, bỏ menu/sidebar cafef (dòng HH:MM...)."""
+
+        if not text.strip():
+            return fallback
+
+        parts: list[str] = []
+        for raw_line in text.replace("\r\n", "\n").splitlines():
+            line = re.sub(r"\s+", " ", raw_line).strip()
+            if not line or SIDEBAR_LINE_PATTERN.match(line):
+                continue
+            if len(line.split()) < 6 and ":" in line[:8]:
+                continue
+            parts.append(line)
+            if sum(len(item) for item in parts) >= max_chars:
+                break
+
+        excerpt = " ".join(parts).strip() if parts else re.sub(r"\s+", " ", text).strip()
+        if len(excerpt) > max_chars:
+            excerpt = excerpt[: max_chars - 1].rstrip() + "…"
+        return excerpt or fallback
+
+    @staticmethod
+    def strip_publish_noise(text: str) -> str:
+        """Bỏ metadata cafef/vnexpress dính trong crawl (tác giả, giờ đăng, chia sẻ)."""
+
+        cleaned = CAFEF_BYLINE_PATTERN.sub(" ", text)
+        cleaned = CAFEF_STOCK_TICKER_LINE_PATTERN.sub(" ", cleaned)
+        cleaned = re.sub(r"\*{2,}", " ", cleaned)
+        cleaned = re.sub(r"\|\s*\d{1,2}:\d{2}\s*(?:AM|PM)?", " ", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bChia sẻ\s*\d+\b", " ", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bThị trường chứng khoán\b", " ", cleaned, flags=re.IGNORECASE)
+        return re.sub(r"\s+", " ", cleaned).strip()
+
+    @staticmethod
+    def polish_article_summary(summary: str, *, title: str = "", site: str = "") -> str:
+        """Chuẩn hoá summary hiển thị — bỏ prefix [site] và nội dung sidebar."""
+
+        cleaned = ARTICLE_SUMMARY_PREFIX_PATTERN.sub("", summary.strip())
+        cleaned = NewsSummarizer.strip_publish_noise(cleaned)
+        if title and cleaned.lower().startswith(title.lower()):
+            cleaned = cleaned[len(title) :].lstrip(" :-")
+        return NewsSummarizer._extract_summary_excerpt(cleaned, fallback=cleaned[:280] if cleaned else "")
 
     @staticmethod
     def _fallback_synthesis(article_summaries: list[dict[str, Any]]) -> str:
@@ -1050,65 +1093,47 @@ class NewsSummarizer:
             snippets.append(f"[{item['site']}] {item['summary']}")
         return " ".join(snippets)
 
-    def _grounded_synthesis(self, article_summaries: list[dict[str, Any]]) -> str:
+    def _grounded_branch_summary(
+        self,
+        question: str,
+        article_summaries: list[dict[str, Any]],
+        *,
+        negative_news: bool = False,
+    ) -> str:
+        """Fallback có cấu trúc: tóm tắt + từng bài kèm link."""
+
         if not article_summaries:
             return "Chưa tìm thấy bài viết phù hợp để tổng hợp tin tức."
 
-        no_clear_negative = any(
-            "Không tìm thấy đủ tin tiêu cực rõ ràng" in str(item.get("reason_selected") or "")
-            for item in article_summaries
-        )
-
-        bullet_lines: list[str] = []
-        limited_count = 0
-        for item in article_summaries[:TOP_SELECTION_LIMIT]:
-            site = str(item.get("site") or "unknown")
-            title = str(item.get("title") or "Bài viết không có tiêu đề").strip()
-            summary = self._clean_model_text(str(item.get("summary") or ""), preserve_lines=False)
-            article_date = str(item.get("published_at") or "").strip()
-            date_label = f" ({article_date})" if article_date else ""
-            if self._is_limited_summary(summary):
-                limited_count += 1
-            bullet_lines.append(f"- [{site}]{date_label} {title}: {summary}")
-
-        limitation_line = ""
-        if limited_count:
-            limitation_line = (
-                f"\n\nHạn chế: {limited_count}/{len(article_summaries[:TOP_SELECTION_LIMIT])} bài chỉ cung cấp tín hiệu hạn chế,"
-                " nên phần tổng hợp cuối có thể chưa đủ chiều sâu."
+        intro = "Tóm tắt các tin mới crawl từ nguồn đã chọn, liên quan câu hỏi."
+        if negative_news:
+            intro = (
+                "Chưa thấy tin tiêu cực rõ ràng; "
+                "dưới đây là các bài gần nhất đã crawl."
             )
 
-        header = "Các ý đáng chú ý từ các bài đã chọn:\n"
-        if no_clear_negative:
-            header = (
-                "Không tìm thấy đủ tin tiêu cực rõ ràng trong các bài mới crawl được.\n"
-                "Dưới đây là các bài gần nhất và liên quan nhất để tham khảo:\n"
-            )
-        return header + "\n".join(bullet_lines) + limitation_line
+        blocks = [f"## Tóm tắt\n{intro}", "## Các bài đã crawl"]
+        for index, item in enumerate(article_summaries[:TOP_SELECTION_LIMIT], start=1):
+            blocks.append(self._format_article_block(index, item))
+
+        return "\n\n".join(blocks)
 
     @staticmethod
-    def _append_source_links(summary: str, article_summaries: list[dict[str, Any]]) -> str:
-        """Gắn thêm danh sách link nguồn để người dùng kiểm tra nhanh từng bài báo."""
-
-        source_lines: list[str] = []
-        seen_urls: set[str] = set()
-
-        for item in article_summaries[:5]:
-            url = str(item.get("url") or "").strip()
-            if not url or url in seen_urls:
-                continue
-            seen_urls.add(url)
-
-            site = str(item.get("site") or "unknown").strip()
-            title = str(item.get("title") or url).strip()
-            published_at = str(item.get("published_at") or "").strip()
-            date_label = f" ({published_at})" if published_at else ""
-            source_lines.append(f"- {site}{date_label}: {title} -> {url}")
-
-        if not source_lines:
-            return summary
-
-        return f"{summary}\n\nNguồn tham khảo:\n" + "\n".join(source_lines)
+    def _format_article_block(index: int, item: dict[str, Any]) -> str:
+        title = str(item.get("title") or "Bài viết không có tiêu đề").strip()
+        site = str(item.get("site") or "không rõ").strip()
+        published_at = str(item.get("published_at") or "").strip() or "không rõ"
+        summary = str(item.get("summary") or "").strip() or "Chưa có tóm tắt."
+        url = str(item.get("url") or "").strip() or "không có link"
+        if len(summary) > 400:
+            summary = summary[:399].rstrip() + "…"
+        return (
+            f"### {index}. {title}\n"
+            f"- Nguồn: {site}\n"
+            f"- Ngày đăng: {published_at}\n"
+            f"- Tóm tắt: {summary}\n"
+            f"- Link: {url}"
+        )
 
     @staticmethod
     def _is_limited_summary(summary: str) -> bool:

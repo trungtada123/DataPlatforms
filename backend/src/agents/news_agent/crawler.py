@@ -275,6 +275,10 @@ class Crawl4aiNewsCrawler:
             return True
         if cleaned_line in {"*", "-", "#"}:
             return True
+        if re.match(r"^\d{1,2}:\d{2}\s", cleaned_line):
+            return True
+        if len(cleaned_line.split()) < 10 and re.search(r"\d{1,2}:\d{2}", cleaned_line):
+            return True
         return False
 
     @staticmethod
