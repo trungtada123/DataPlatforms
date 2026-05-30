@@ -50,10 +50,48 @@ function IntentPlanSection({ plan }: { plan: IntentPlan }) {
         <dd>{plan.primary_intent ?? "—"}</dd>
         <dt>Chế độ phân loại</dt>
         <dd>{plan.classifier_mode ?? "—"}</dd>
-        <dt>Độ tin cậy</dt>
-        <dd>{plan.confidence !== undefined ? plan.confidence.toFixed(2) : "—"}</dd>
         <dt>Lý do</dt>
         <dd>{plan.reasoning_brief ?? "—"}</dd>
+        {plan.tool_queries && Object.keys(plan.tool_queries).length > 0 ? (
+          <>
+            <dt>Truy vấn nhánh</dt>
+            <dd>
+              <pre className="intent-json-inline">
+                {JSON.stringify(plan.tool_queries, null, 2)}
+              </pre>
+            </dd>
+          </>
+        ) : null}
+        {plan.entities && Object.keys(plan.entities).length > 0 ? (
+          <>
+            <dt>Entities</dt>
+            <dd>
+              <pre className="intent-json-inline">
+                {JSON.stringify(plan.entities, null, 2)}
+              </pre>
+            </dd>
+          </>
+        ) : null}
+        {plan.time_constraints && Object.keys(plan.time_constraints).length > 0 ? (
+          <>
+            <dt>Thời gian</dt>
+            <dd>
+              <pre className="intent-json-inline">
+                {JSON.stringify(plan.time_constraints, null, 2)}
+              </pre>
+            </dd>
+          </>
+        ) : null}
+        {plan.analysis_requirements && Object.keys(plan.analysis_requirements).length > 0 ? (
+          <>
+            <dt>Phân tích</dt>
+            <dd>
+              <pre className="intent-json-inline">
+                {JSON.stringify(plan.analysis_requirements, null, 2)}
+              </pre>
+            </dd>
+          </>
+        ) : null}
       </dl>
     </details>
   );

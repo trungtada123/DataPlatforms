@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from datetime import datetime
 
 
 TICKER_PATTERN = re.compile(r"\b([A-Z]{3,5})\b")
@@ -52,12 +53,14 @@ TICKER_COMPANY_NAMES: dict[str, str] = {
     "BID": "BIDV",
     "GAS": "PV Gas",
     "PLX": "Petrolimex",
+    "VNM": "Vinamilk",
 }
 
 TICKER_SEARCH_ALIASES: dict[str, tuple[str, ...]] = {
     "HPG": ("hoa phat", "tap doan hoa phat", "cong ty hoa phat"),
     "ACB": ("ngan hang acb", "asia commercial bank"),
     "FPT": ("tap doan fpt",),
+    "VNM": ("vinamilk", "cong ty vinamilk"),
 }
 
 RECENT_MARKERS = (
@@ -104,16 +107,25 @@ def build_news_search_question(planned_query: str, original_query: str = "") -> 
     tickers = extract_tickers(combined)
     primary_ticker = tickers[0] if tickers else ""
     company_name = TICKER_COMPANY_NAMES.get(primary_ticker, primary_ticker)
+    year = datetime.now().year
 
     if planned and _has_vietnamese_diacritics(planned):
         if _wants_recent_news(planned, original) and primary_ticker:
-            return f"tin tức {company_name or primary_ticker} mới nhất 2026"
+            label = company_name or primary_ticker
+            if label != primary_ticker:
+                return f"tin tức {label} {primary_ticker} mới nhất {year}"
+            return f"tin tức {primary_ticker} mới nhất {year}"
         return planned
 
     if primary_ticker:
+        label = company_name or primary_ticker
         if _wants_recent_news(planned, original):
-            return f"tin tức {company_name} mới nhất 2026"
-        return f"tin tức {company_name}"
+            if label != primary_ticker:
+                return f"tin tức {label} {primary_ticker} mới nhất {year}"
+            return f"tin tức {primary_ticker} mới nhất {year}"
+        if label != primary_ticker:
+            return f"tin tức {label} {primary_ticker}"
+        return f"tin tức {primary_ticker}"
 
     if original and _has_vietnamese_diacritics(original):
         return original

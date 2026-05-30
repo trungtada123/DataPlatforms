@@ -436,31 +436,58 @@ from src.schemas.orchestration import IntentPlan, NormalizedQueryRequest, ToolNa
 
 
 CLASSIFIER_PROMPT_TEMPLATE = """
-You are an intent classifier for a stock-market orchestration service.
+You are an intent classifier for a Vietnamese stock-market orchestration service.
+Downstream agents ONLY receive your JSON — especially `tool_queries`, `entities`, `time_constraints`,
+and `analysis_requirements`. Choosing tools is not enough; each selected tool needs a concrete query.
 
 Current date: {today}
 
-Supported tools:
-- market
-- news
-- financial_reports
+Supported tools (exact keys):
+- market — live/historical prices, volume, MA/MACD/RSI, intraday, compare prices across dates
+- news — recent articles about tickers/companies (web search + crawl; freshness matters)
+- financial_reports — BCTC, quarterly/annual reports, audit opinion, line items from filings
 
-For this phase, prefer `market` whenever the user asks about price, ticker, technical indicators,
-historical comparison, intraday status, or market-data analysis.
+Routing rules:
+- Price / indicators / compare dates → primary_intent `market`, include `market` in tools_to_use
+- News / headlines / "tin tức" / sentiment from articles → primary_intent `news`, include `news`
+- Báo cáo tài chính / financial statements / quý Q1 Q2 → primary_intent `financial_reports`
+- Mixed questions (e.g. "tin mới và giá phản ứng") → list ALL needed tools in tools_to_use
 
-Return valid JSON only with this shape:
+CRITICAL — `tool_queries` (one entry per tool in tools_to_use, omit unused tools):
+- market: Vietnamese if user wrote Vietnamese. Include ticker(s). Examples:
+  "giá hiện tại của ACB", "chỉ báo kỹ thuật HPG MA50 MACD", "so sánh giá TCB ngày 13/01/2026 và 14/04/2026"
+- news: Vietnamese search phrase for DuckDuckGo. MUST include ticker or company name + recency.
+  Good: "tin tức FPT mới nhất", "tin tức Hòa Phát HPG mới nhất", "tin ACB hôm nay"
+  Bad: "FPT latest news", "news about ACB" (English hurts search on VN sites)
+- financial_reports: keep quarter/year and audit/metric wording from the user when present.
+  Good: "báo cáo tài chính quý 2 năm 2025 ACB", "ACB reviewed financial statements Q2 2025 opinion"
+  Bad: generic "financial report for ACB" when user specified Q2/2025
+
+CRITICAL — `entities`:
+- tickers: uppercase HOSE symbols only (ACB, FPT, HPG, …). Never put words like TIN from "tin tức".
+- company_names: Vietnamese or English legal/common names when known (e.g. "Hòa Phát", "Vinamilk")
+- Do NOT put analysis flags inside entities; use analysis_requirements instead.
+
+CRITICAL — `time_constraints`:
+- explicit_dates: DD/MM/YYYY strings copied from the user for market compare or report as-of dates
+- date_range: [start, end] when user gives a range
+- relative_periods: e.g. "current_session", "year_to_date", "month_to_date", "latest_news", "quarter_2_2025"
+
+CRITICAL — `analysis_requirements` (booleans used by merger/router):
+- intraday, historical, technical_analysis, comparison, news, financial_reports, health_debug
+- Set `news: true` when news tool is used; `financial_reports: true` when reports tool is used.
+
+`normalized_query`: short faithful paraphrase of user intent (Vietnamese if user used Vietnamese).
+
+Return valid JSON only:
 {{
   "primary_intent": "market|news|financial_reports|unknown",
   "normalized_query": "...",
   "tools_to_use": ["market"],
-  "tool_queries": {{"market": "...", "news": "...", "financial_reports": "..."}},
+  "tool_queries": {{"market": "giá hiện tại của ACB"}},
   "entities": {{
     "tickers": ["ACB"],
-    "company_names": ["Asia Commercial Bank"],
-    "intraday": true,
-    "historical": false,
-    "technical_analysis": false,
-    "comparison": false
+    "company_names": ["Asia Commercial Bank"]
   }},
   "time_constraints": {{
     "explicit_dates": [],
@@ -472,6 +499,8 @@ Return valid JSON only with this shape:
     "historical": false,
     "technical_analysis": false,
     "comparison": false,
+    "news": false,
+    "financial_reports": false,
     "health_debug": false
   }},
   "reasoning_brief": "short explanation",
@@ -511,7 +540,8 @@ class IntentClassifier:
 
         try:
             plan = self._classify_with_gemini(normalized_request.question, fallback_plan)
-            return self._preserve_multi_tool_guard(plan, fallback_plan)
+            plan = self._preserve_multi_tool_guard(plan, fallback_plan)
+            return self._refine_intent_plan(normalized_request.question, plan, fallback_plan)
         except Exception:
             fallback_plan.classifier_mode = "fallback_rule_based"
             return fallback_plan
@@ -611,7 +641,7 @@ class IntentClassifier:
         except (TypeError, ValueError):
             normalized_confidence = fallback_plan.confidence
 
-        return IntentPlan(
+        plan = IntentPlan(
             original_query=question,
             normalized_query=normalized_query,
             tools_to_use=tools_to_use,
@@ -623,6 +653,159 @@ class IntentClassifier:
             primary_intent=primary_intent,
             classifier_mode="gemini",
             confidence=normalized_confidence,
+        )
+        return self._refine_intent_plan(question, plan, fallback_plan)
+
+    @staticmethod
+    def _question_uses_vietnamese(text: str) -> bool:
+        return bool(
+            re.search(
+                r"[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]",
+                text,
+                flags=re.IGNORECASE,
+            )
+        )
+
+    @staticmethod
+    def _should_prefer_fallback_tool_query(
+        tool: ToolName,
+        question: str,
+        fallback_query: str,
+        current_query: str,
+    ) -> bool:
+        fallback = " ".join((fallback_query or "").split())
+        current = " ".join((current_query or "").split())
+        if not fallback:
+            return False
+        if not current:
+            return True
+
+        if tool == ToolName.FINANCIAL_REPORTS:
+            return IntentClassifier._should_prefer_fallback_reports_query(fallback, current)
+
+        if tool == ToolName.NEWS:
+            if IntentClassifier._question_uses_vietnamese(question) and not IntentClassifier._question_uses_vietnamese(
+                current
+            ):
+                return True
+            fb_norm = normalize_free_text(fallback)
+            cur_norm = normalize_free_text(current)
+            news_hints = ("tin tuc", "tin ", "moi nhat", "hom nay")
+            if any(hint in fb_norm for hint in news_hints) and "tin" not in cur_norm:
+                return True
+            if re.search(r"\b(?:latest news|news about)\b", current, flags=re.IGNORECASE):
+                return True
+            return False
+
+        if tool == ToolName.MARKET:
+            if IntentClassifier._question_uses_vietnamese(question) and not IntentClassifier._question_uses_vietnamese(
+                current
+            ):
+                return True
+            cur_norm = normalize_free_text(current)
+            if "price" in cur_norm or "current price" in cur_norm:
+                vn_market = ("gia", "ma50", "macd", "rsi", "so sanh", "chi bao")
+                if not any(token in cur_norm for token in vn_market):
+                    return True
+            return False
+
+        return False
+
+    def _refine_intent_plan(self, question: str, plan: IntentPlan, fallback_plan: IntentPlan) -> IntentPlan:
+        """Gộp metadata rule-based và sửa tool_queries mơ hồ từ LLM."""
+
+        tickers = [
+            str(item).strip().upper()
+            for item in (plan.entities.get("tickers") or [])
+            if str(item).strip()
+        ]
+        for ticker in detect_tickers(question):
+            if ticker not in tickers:
+                tickers.append(ticker)
+        for ticker in fallback_plan.entities.get("tickers") or []:
+            normalized = str(ticker).strip().upper()
+            if normalized and normalized not in tickers:
+                tickers.append(normalized)
+
+        companies = [
+            str(item).strip()
+            for item in (plan.entities.get("company_names") or [])
+            if str(item).strip()
+        ]
+        for name in detect_company_names(question):
+            if name not in companies:
+                companies.append(name)
+        for name in fallback_plan.entities.get("company_names") or []:
+            normalized = str(name).strip()
+            if normalized and normalized not in companies:
+                companies.append(normalized)
+
+        analysis_requirements = dict(fallback_plan.analysis_requirements)
+        analysis_requirements.update(plan.analysis_requirements or {})
+        if ToolName.NEWS in plan.tools_to_use:
+            analysis_requirements["news"] = True
+        if ToolName.FINANCIAL_REPORTS in plan.tools_to_use:
+            analysis_requirements["financial_reports"] = True
+
+        expected_queries = _build_fallback_tool_queries(
+            question,
+            plan.tools_to_use,
+            tickers,
+            companies,
+            is_current=bool(analysis_requirements.get("intraday")),
+            is_technical=bool(analysis_requirements.get("technical_analysis")),
+            is_financial_reports=bool(analysis_requirements.get("financial_reports")),
+        )
+
+        tool_queries = dict(plan.tool_queries)
+        for tool in plan.tools_to_use:
+            fallback_query = expected_queries.get(tool.value) or fallback_plan.tool_queries.get(tool.value, "")
+            current_query = tool_queries.get(tool.value, "")
+            if self._is_metric_report_question(question) and tool == ToolName.FINANCIAL_REPORTS:
+                tool_queries[tool.value] = question
+                continue
+            if self._should_prefer_fallback_tool_query(tool, question, fallback_query, current_query):
+                tool_queries[tool.value] = fallback_query
+            elif not current_query.strip():
+                tool_queries[tool.value] = fallback_query
+
+        entities = dict(fallback_plan.entities)
+        entities.update(plan.entities or {})
+        entities["tickers"] = tickers
+        entities["company_names"] = companies
+
+        time_constraints = dict(fallback_plan.time_constraints)
+        raw_time = plan.time_constraints or {}
+        for key, value in raw_time.items():
+            if not value:
+                continue
+            if key == "relative_periods":
+                merged = list(time_constraints.get("relative_periods", []))
+                for item in value:
+                    if item not in merged:
+                        merged.append(item)
+                time_constraints["relative_periods"] = merged
+            elif key == "explicit_dates":
+                merged = list(time_constraints.get("explicit_dates", []))
+                for item in value:
+                    if item not in merged:
+                        merged.append(item)
+                time_constraints["explicit_dates"] = merged
+            else:
+                time_constraints[key] = value
+
+        normalized_query = plan.normalized_query
+        if self._question_uses_vietnamese(question) and not self._question_uses_vietnamese(normalized_query):
+            normalized_query = question
+
+        return plan.model_copy(
+            update={
+                "tool_queries": tool_queries,
+                "entities": entities,
+                "time_constraints": time_constraints,
+                "analysis_requirements": analysis_requirements,
+                "normalized_query": normalized_query,
+            }
         )
 
     @staticmethod

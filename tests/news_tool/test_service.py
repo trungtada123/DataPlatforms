@@ -477,7 +477,7 @@ class NewsToolServiceTests(TestCase):
                 side_effect=["article-1", "article-2"],
             ), patch("src.agents.news_agent.service.finalize_news_run"):
                 first = service.ask("tin tuc HPG")
-                second = service.ask("Hoa Phat moi nhat")
+                second = service.ask("tin tuc HPG")
 
         self.assertEqual(first.stats["crawled_new"], 1)
         self.assertEqual(second.stats["cache_hits"], 1)

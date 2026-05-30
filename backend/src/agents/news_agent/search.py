@@ -10,7 +10,7 @@ from typing import Any
 from src.config.news import NewsToolSettings, get_news_tool_settings
 from src.schemas.api import NewsSearchHit
 from .query_build import expand_entity_tokens_for_search
-from .storage import normalize_url
+from .storage import normalize_news_hostname, normalize_url
 
 
 ARTICLE_ID_PATTERN = re.compile(r"\d{5,}(?:\.\w+)?$")
@@ -108,6 +108,8 @@ SOURCE_PRIORITY: tuple[str, ...] = (
 SITE_PRIORITY_DOMAINS = SOURCE_PRIORITY
 TRUSTED_SITES = SOURCE_PRIORITY
 
+RECENT_SEARCH_TIMELIMITS = frozenset({"d", "w", "m"})
+
 RECENT_INTENT_TOKENS = (
     "hom nay",
     "moi nhat",
@@ -149,6 +151,7 @@ def is_article_url(url: str, site: str) -> bool:
         for marker in (
             "/statistics",
             "/statistic",
+            "/du-lieu/",
             "/tim-kiem",
             "/search",
             "/tag/",
@@ -240,6 +243,30 @@ def _datetime_from_parts(year: int, month: int, day: int) -> datetime | None:
         return None
 
 
+def parse_publication_date_from_ddg_date(raw: Any) -> datetime | None:
+    """Parse trường date DDG (str hoặc datetime)."""
+
+    if raw is None:
+        return None
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    text = str(raw).strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%Y/%m/%d", "%d-%m-%Y"):
+        try:
+            return datetime.strptime(text, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    for candidate in (text, text.replace("Z", "+00:00")):
+        try:
+            parsed = datetime.fromisoformat(candidate)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return parse_publication_date_from_title(text)
+
+
 def parse_publication_date_from_title(title: str) -> datetime | None:
     """Bắt ngày trong tiêu đề/snippet kiểu 'Thứ ba, 26/5/2026'."""
 
@@ -328,6 +355,42 @@ def article_recency_timestamp(
     return max(item.timestamp() for item in candidates)
 
 
+def hit_has_known_stale_url(url: str, *, cutoff_ts: float) -> bool:
+    """True nếu URL chứa mã ngày và ngày đó cũ hơn ngưỡng."""
+
+    parsed = parse_publication_date_from_url(url)
+    if parsed is None:
+        return False
+    return parsed.timestamp() < cutoff_ts
+
+
+def hit_is_plausibly_fresh(
+    hit: NewsSearchHit,
+    *,
+    cutoff_ts: float,
+    entity_tokens: list[str],
+) -> bool:
+    """Bài trong ngưỡng tuổi; bài không parse được ngày chỉ nhận khi search timelimit gần đây."""
+
+    if entity_tokens and DuckDuckGoNewsSearch._score_hit_relevance(hit, entity_tokens) <= 0:
+        return False
+
+    if hit_has_known_stale_url(hit.normalized_url or hit.url, cutoff_ts=cutoff_ts):
+        return False
+
+    ts = article_recency_timestamp(
+        url=hit.normalized_url or hit.url,
+        published_at=hit.published_at,
+        title=hit.title,
+        snippet=hit.snippet,
+    )
+    if ts > 0:
+        return ts >= cutoff_ts
+
+    metadata = hit.metadata if isinstance(hit.metadata, dict) else {}
+    return metadata.get("timelimit") in RECENT_SEARCH_TIMELIMITS
+
+
 class DuckDuckGoNewsSearch:
     """Search client cho news tool bằng DDGS (per-site + site: operator)."""
 
@@ -368,6 +431,10 @@ class DuckDuckGoNewsSearch:
                     if found_for_site >= self.settings.max_results_per_site:
                         break
 
+                    remaining = self.settings.max_results_per_site - found_for_site
+                    if remaining <= 0:
+                        break
+
                     site_hits = self._search_one_site(
                         client=client,
                         site=site,
@@ -376,6 +443,7 @@ class DuckDuckGoNewsSearch:
                         entity_tokens=entity_tokens,
                         start_position=next_position,
                         source_priority=source_priority,
+                        max_accept=remaining,
                     )
                     for relevance_score, hit in site_hits:
                         next_position = hit.position + 1
@@ -396,8 +464,11 @@ class DuckDuckGoNewsSearch:
                         if found_for_site >= self.settings.max_results_per_site:
                             break
 
+                    if found_for_site >= self.settings.max_results_per_site:
+                        break
+
         ordered_hits.sort(key=lambda item: hit_source_sort_key(item, site_order=site_order))
-        return ordered_hits[:target_count]
+        return ordered_hits[:target_count]  # cắt sau dedupe + sort theo source_priority
 
     def _search_one_site(
         self,
@@ -409,14 +480,17 @@ class DuckDuckGoNewsSearch:
         entity_tokens: list[str],
         start_position: int,
         source_priority: int = 0,
+        max_accept: int | None = None,
     ) -> list[tuple[int, NewsSearchHit]]:
         """Tìm trên một site với pattern `{query} site:{domain}` như notebook mẫu."""
 
-        site_key = site.replace("www.", "")
+        site_key = normalize_news_hostname(site.replace("www.", ""))
+        accept_limit = max_accept if max_accept is not None else self.settings.max_results_per_site
+        accept_limit = max(1, accept_limit)
         scoped_query = f"{query_text} site:{site}"
         extra = self.settings.search_extra_results_per_site
         kwargs: dict[str, Any] = {
-            "max_results": self.settings.max_results_per_site + extra,
+            "max_results": accept_limit + extra,
             "region": "vn-vi",
             "safesearch": "off",
         }
@@ -431,14 +505,16 @@ class DuckDuckGoNewsSearch:
         accepted: list[tuple[int, NewsSearchHit]] = []
         position = start_position
         for item in raw_results:
-            if len(accepted) >= self.settings.max_results_per_site:
+            if len(accepted) >= accept_limit:
                 break
 
             hit = self._build_hit(item=item, site=site, position=position, search_query=scoped_query)
             if hit is None:
                 continue
 
-            if site_key not in hit.normalized_url:
+            host_match = re.search(r"https?://([^/]+)", hit.normalized_url)
+            hit_host = normalize_news_hostname(host_match.group(1)) if host_match else ""
+            if hit_host != site_key:
                 continue
 
             relevance_score = self._score_hit_relevance(hit, entity_tokens)
@@ -749,13 +825,23 @@ class DuckDuckGoNewsSearch:
         if not url:
             return None
         normalized_url = normalize_url(url)
-        effective_site = site or self._infer_site(url)
-        if effective_site.replace("www.", "") not in normalized_url:
+        effective_site = normalize_news_hostname((site or self._infer_site(url)).replace("www.", ""))
+        if effective_site not in normalized_url:
             return None
         if not is_article_url(normalized_url, effective_site):
             return None
         title = str(item.get("title") or item.get("heading") or normalized_url)
         snippet = str(item.get("body") or item.get("snippet") or "").strip()
+        published_at = item.get("date")
+        ddg_date = parse_publication_date_from_ddg_date(published_at)
+        if ddg_date:
+            published_at = ddg_date.date().isoformat()
+        elif snippet or title:
+            for text in (snippet, title):
+                parsed = parse_publication_date_from_title(str(text))
+                if parsed:
+                    published_at = parsed.date().isoformat()
+                    break
         return NewsSearchHit(
             url=url,
             normalized_url=normalized_url,
@@ -763,11 +849,13 @@ class DuckDuckGoNewsSearch:
             snippet=snippet,
             site=effective_site,
             position=position,
-            published_at=item.get("date"),
+            published_at=published_at,
             metadata={"normalized_url": normalized_url, "search_query": search_query},
         )
 
     @staticmethod
     def _infer_site(url: str) -> str:
         match = re.search(r"https?://([^/]+)", url)
-        return match.group(1).lower() if match else "unknown"
+        if not match:
+            return "unknown"
+        return normalize_news_hostname(match.group(1).lower())

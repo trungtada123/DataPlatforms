@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest import TestCase
+from unittest import TestCase, mock
 
 from src.config.news import NewsToolSettings
 from src.schemas.api import NewsSearchHit
 from src.agents.news_agent.search import (
     DuckDuckGoNewsSearch,
+    hit_is_plausibly_fresh,
     infer_timelimit,
     is_article_url,
     parse_publication_date_from_url,
     resolve_timelimit,
     site_priority_rank,
 )
+from src.agents.news_agent.storage import canonicalize_url, normalize_news_hostname
 
 
 class DuckDuckGoNewsSearchTests(TestCase):
@@ -209,4 +211,89 @@ class DuckDuckGoNewsSearchTests(TestCase):
         self.assertTrue(any("tiêu cực" in item.lower() or "tieu cuc" in item.lower() for item in candidates))
         self.assertTrue(any("rủi ro" in item.lower() or "rui ro" in item.lower() for item in candidates))
         self.assertTrue(any("gần đây" in item.lower() or "gan day" in item.lower() for item in candidates))
+
+    def test_normalize_news_hostname_maps_vnxpress_to_vnexpress(self) -> None:
+        self.assertEqual(normalize_news_hostname("vnxpress.net"), "vnexpress.net")
+        self.assertEqual(normalize_news_hostname("vnexpress"), "vnexpress.net")
+        self.assertIn(
+            "vnexpress.net",
+            canonicalize_url("https://www.vnxpress.net/kinh-doanh/bai-viet-123456.html"),
+        )
+
+    def test_hit_is_plausibly_fresh_accepts_undated_dnse_with_recent_timelimit(self) -> None:
+        from datetime import datetime, timezone
+
+        cutoff = datetime.now(timezone.utc).timestamp() - 120 * 86400
+        hit = NewsSearchHit(
+            url="https://www.dnse.com.vn/senses/tin-tuc/fpt-lai-hon-3300-ty-dong-35226790",
+            normalized_url="https://www.dnse.com.vn/senses/tin-tuc/fpt-lai-hon-3300-ty-dong-35226790",
+            title="FPT lãi hơn 3.300 tỷ đồng sau 4 tháng",
+            snippet="Kết quả kinh doanh quý gần nhất của FPT.",
+            site="dnse.com.vn",
+            position=1,
+            metadata={"timelimit": "m"},
+        )
+        self.assertTrue(
+            hit_is_plausibly_fresh(hit, cutoff_ts=cutoff, entity_tokens=["fpt"]),
+        )
+
+    def test_hit_is_plausibly_fresh_rejects_cafef_url_with_old_embedded_date(self) -> None:
+        from datetime import datetime, timezone
+
+        cutoff = datetime.now(timezone.utc).timestamp() - 120 * 86400
+        hit = NewsSearchHit(
+            url="https://cafef.vn/fpt-chot-ngay-chia-co-tuc-188250529201447418.chn",
+            normalized_url="https://cafef.vn/fpt-chot-ngay-chia-co-tuc-188250529201447418.chn",
+            title="FPT chốt ngày chia cổ tức",
+            snippet="FPT công bố thông tin.",
+            site="cafef.vn",
+            position=1,
+            metadata={"timelimit": "m"},
+        )
+        self.assertFalse(
+            hit_is_plausibly_fresh(hit, cutoff_ts=cutoff, entity_tokens=["fpt"]),
+        )
+
+    def test_search_stops_after_max_results_per_site_across_queries(self) -> None:
+        cafef_limits: list[int] = []
+        sample_hit = NewsSearchHit(
+            url="https://cafef.vn/acb-cap-nhat-188260416123456.chn",
+            normalized_url="https://cafef.vn/acb-cap-nhat-188260416123456.chn",
+            title="ACB cập nhật",
+            snippet="ACB tin mới",
+            site="cafef.vn",
+            position=1,
+        )
+
+        call_count = 0
+
+        def fake_search_one_site(**kwargs):  # type: ignore[no-untyped-def]
+            nonlocal call_count
+            site = kwargs.get("site")
+            if site == "cafef.vn":
+                cafef_limits.append(int(kwargs["max_accept"]))
+            if site != "cafef.vn" or kwargs.get("max_accept", 0) <= 0:
+                return []
+            call_count += 1
+            slug = f"acb-cap-nhat-bai-viet-so-{call_count}-188260528170618458"
+            unique_hit = sample_hit.model_copy(
+                update={
+                    "url": f"https://cafef.vn/{slug}.chn",
+                    "normalized_url": f"https://cafef.vn/{slug}.chn",
+                }
+            )
+            return [(10, unique_hit)]
+
+        with mock.patch.object(self.search, "_search_one_site", side_effect=fake_search_one_site):
+            with mock.patch("ddgs.DDGS") as ddgs_cls:
+                ddgs_cls.return_value.__enter__.return_value = mock.MagicMock()
+                hits = self.search.search("tin tức ACB mới nhất", compact_queries=False)
+
+        self.assertEqual(cafef_limits[0], self.settings.max_results_per_site)
+        self.assertEqual(cafef_limits[1], self.settings.max_results_per_site - 1)
+        self.assertEqual(len(cafef_limits), 2)
+        self.assertLessEqual(
+            len([hit for hit in hits if hit.site == "cafef.vn"]),
+            self.settings.max_results_per_site,
+        )
 

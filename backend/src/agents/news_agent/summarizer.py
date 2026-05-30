@@ -52,7 +52,8 @@ Với MỖI bài (giữ đủ link), dùng block:
 - Link: [url đầy đủ]
 
 Quy tắc:
-- Các bài đã sắp theo thứ tự ưu tiên nguồn (vietstock → cafef → dnse → vnexpress → thanhnien); nguồn đứng trước đáng tin hơn khi mâu thuẫn.
+- Các bài đã được sắp xếp theo thứ tự ưu tiên nguồn (vietstock → cafef → dnse → vnexpress → thanhnien).
+- Nếu các nguồn mâu thuẫn, ưu tiên nguồn có source_priority thấp hơn (vietstock thấp nhất = đáng tin nhất).
 - Không bỏ Link.
 - Không lặp cùng một bài.
 - Không chép nguyên văn markdown crawl dài.

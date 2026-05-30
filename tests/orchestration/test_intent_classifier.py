@@ -191,3 +191,40 @@ class IntentClassifierTests(TestCase):
 
         self.assertEqual(plan.tool_queries["financial_reports"], question)
 
+    def test_prefers_vietnamese_fallback_news_query_over_english_model_query(self) -> None:
+        classifier = IntentClassifier(
+            settings=SimpleNamespace(
+                google_api_key="present-key",
+                google_api_keys=["present-key"],
+                gemini_model="gemini-test",
+                tzinfo=timezone.utc,
+            )
+        )
+        question = "Tin tức mới nhất của FPT"
+        fallback_plan = build_rule_based_intent_plan(question)
+
+        plan = classifier._plan_from_payload(
+            question,
+            {
+                "primary_intent": "news",
+                "normalized_query": "latest news of FPT",
+                "tools_to_use": ["news"],
+                "tool_queries": {"news": "FPT latest news"},
+                "entities": {"tickers": ["FPT"]},
+                "time_constraints": {"relative_periods": []},
+                "analysis_requirements": {"news": True},
+                "reasoning_brief": "generic english news query",
+                "confidence": 0.85,
+            },
+            fallback_plan,
+        )
+
+        self.assertEqual(plan.tool_queries["news"], "tin tức FPT mới nhất")
+        self.assertEqual(plan.normalized_query, question)
+        self.assertTrue(plan.analysis_requirements["news"])
+
+    def test_rule_based_news_query_is_vietnamese(self) -> None:
+        plan = build_rule_based_intent_plan("Tin tức mới nhất của FPT")
+        self.assertIn("tin tức", plan.tool_queries["news"].casefold())
+        self.assertIn("FPT", plan.tool_queries["news"])
+

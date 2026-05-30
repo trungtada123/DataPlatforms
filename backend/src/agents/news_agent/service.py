@@ -13,11 +13,20 @@ from src.core.database import get_engine
 from src.schemas.api import NewsArticleDetail, NewsCrawledArticle, NewsSearchHit, NewsToolResponse
 
 from .crawler import Crawl4aiNewsCrawler
-from .query_build import build_news_search_question, expand_entity_tokens_for_search, extract_tickers
+from .query_build import (
+    TICKER_COMPANY_NAMES,
+    build_news_search_question,
+    expand_entity_tokens_for_search,
+    extract_tickers,
+    normalize_free_text,
+)
 from .search import (
     DuckDuckGoNewsSearch,
     article_recency_timestamp,
+    hit_has_known_stale_url,
+    hit_is_plausibly_fresh,
     hit_source_sort_key,
+    parse_publication_date_from_ddg_date,
     parse_publication_date_from_title,
     parse_publication_date_from_url,
 )
@@ -291,8 +300,17 @@ class NewsToolService:
 
     @staticmethod
     def _entity_tokens_for_selection(question: str) -> list[str]:
-        tickers = extract_tickers(question)
+        tickers = list(extract_tickers(question))
+        normalized_q = normalize_free_text(question)
+        for ticker, company_name in TICKER_COMPANY_NAMES.items():
+            company_norm = normalize_free_text(company_name)
+            if company_norm and company_norm in normalized_q and ticker not in tickers:
+                tickers.append(ticker)
+
         seed = [ticker.lower() for ticker in tickers]
+        entity = DuckDuckGoNewsSearch._extract_entity_phrase(question)
+        if entity:
+            seed.append(entity)
         return expand_entity_tokens_for_search(seed)
 
     def _select_top_hits(
@@ -308,12 +326,13 @@ class NewsToolService:
                 continue
             url_date = parse_publication_date_from_url(canonical_url)
             title_date = parse_publication_date_from_title(hit.title)
-            resolved_published_at = hit.published_at
-            if not resolved_published_at:
-                if url_date:
-                    resolved_published_at = url_date.date().isoformat()
-                elif title_date:
-                    resolved_published_at = title_date.date().isoformat()
+            snippet_date = parse_publication_date_from_title(hit.snippet or "")
+            ddg_date = parse_publication_date_from_ddg_date(hit.published_at)
+            parsed_dates = [value for value in (ddg_date, url_date, title_date, snippet_date) if value]
+            if parsed_dates:
+                resolved_published_at = max(parsed_dates, key=lambda item: item.timestamp()).date().isoformat()
+            else:
+                resolved_published_at = hit.published_at
             deduped[canonical_url] = hit.model_copy(
                 update={
                     "normalized_url": canonical_url,
@@ -351,21 +370,20 @@ class NewsToolService:
             deduped.values(),
             key=lambda hit: hit_source_sort_key(hit, site_order=site_order),
         )
-        dated_hits = [hit for hit in ordered if recency_ts(hit) > 0]
-        fresh_hits = [hit for hit in dated_hits if recency_ts(hit) >= cutoff_ts]
         entity_tokens = self._entity_tokens_for_selection(question) if question else []
-        if entity_tokens and fresh_hits:
-            relevant_fresh = [
-                hit
-                for hit in fresh_hits
-                if DuckDuckGoNewsSearch._score_hit_relevance(hit, entity_tokens) > 0
-            ]
-            if relevant_fresh:
-                fresh_hits = relevant_fresh
+        fresh_hits = [
+            hit
+            for hit in ordered
+            if hit_is_plausibly_fresh(hit, cutoff_ts=cutoff_ts, entity_tokens=entity_tokens)
+        ]
         if fresh_hits:
             return fresh_hits[: self.settings.max_articles_to_crawl], False
 
-        only_stale = bool(dated_hits)
+        dated_hits = [hit for hit in ordered if recency_ts(hit) > 0]
+        only_stale = bool(dated_hits) or any(
+            hit_has_known_stale_url(hit.normalized_url or hit.url, cutoff_ts=cutoff_ts)
+            for hit in ordered
+        )
         return [], only_stale
 
     def _materialize_articles(

@@ -15,6 +15,15 @@ TRACKING_QUERY_PREFIXES = (
     "utm_",
     "ga_",
 )
+NEWS_HOST_ALIASES: dict[str, str] = {
+    "vnxpress": "vnexpress.net",
+    "vnxpress.net": "vnexpress.net",
+    "vnexpress": "vnexpress.net",
+    "www.vnexpress.net": "vnexpress.net",
+    "www.vnxpress.net": "vnexpress.net",
+    "e.vnexpress.net": "vnexpress.net",
+}
+
 TRACKING_QUERY_KEYS = {
     "fbclid",
     "gclid",
@@ -41,6 +50,15 @@ def _is_tracking_query_key(key: str) -> bool:
     return any(lowered.startswith(prefix) for prefix in TRACKING_QUERY_PREFIXES)
 
 
+def normalize_news_hostname(host: str) -> str:
+    """Chuẩn hoá hostname tin tức (alias VnExpress, bỏ www.)."""
+
+    lowered = host.strip().lower()
+    if lowered.startswith("www."):
+        lowered = lowered[4:]
+    return NEWS_HOST_ALIASES.get(lowered, lowered)
+
+
 def canonicalize_url(url: str) -> str:
     """Chuẩn hoá URL để dedupe và tạo hash ổn định.
 
@@ -63,7 +81,8 @@ def canonicalize_url(url: str) -> str:
     if normalized_path != "/" and normalized_path.endswith("/"):
         normalized_path = normalized_path.rstrip("/")
 
-    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), normalized_path, normalized_query, ""))
+    netloc = normalize_news_hostname(parts.netloc.lower())
+    return urlunsplit((parts.scheme.lower(), netloc, normalized_path, normalized_query, ""))
 
 
 def normalize_url(url: str) -> str:
