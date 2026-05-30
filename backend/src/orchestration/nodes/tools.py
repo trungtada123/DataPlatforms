@@ -302,9 +302,10 @@ def run_financial_agent(state: OrchestrationState) -> dict[str, Any]:
 
     return _run_agent_node(
         state=state,
-        tool_name="financial",
+        tool_name="financial_reports",
         state_key="financial_result",
         runner=financial_answer,
+        selected_aliases={"financial"},
     )
 
 
@@ -315,6 +316,7 @@ def _run_agent_node(
     state_key: str,
     runner: Callable[[str], AgentResult],
     query_resolver: Callable[[OrchestrationState], str] | None = None,
+    selected_aliases: set[str] | None = None,
 ) -> dict[str, Any]:
     if query_resolver is None:
         query = str(state.get("query", "") or "").strip()
@@ -329,7 +331,8 @@ def _run_agent_node(
         if str(item).strip()
     ]
 
-    if selected_tools and tool_name not in selected_tools:
+    accepted_tool_names = {tool_name, *(selected_aliases or set())}
+    if selected_tools and not accepted_tool_names.intersection(selected_tools):
         trace.append(
             {
                 "step": f"{tool_name}_agent",

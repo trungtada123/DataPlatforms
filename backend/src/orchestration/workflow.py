@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Protocol, cast
+from typing import Any, Callable, Protocol, cast
 
 from src.schemas.orchestration import (
     DebugTrace,
@@ -193,16 +193,20 @@ def _build_langgraph_workflow() -> _WorkflowRunner | None:
 
     try:
         graph = StateGraph(OrchestrationState)
-        graph.add_node("classify", classify)
-        graph.add_node("route", route)
-        graph.add_node("execute_tools", _execute_selected_tools)
-        graph.add_node("merge", merge)
-        graph.add_node("synthesize", synthesize)
+        graph.add_node("classify", _as_delta_node(classify))
+        graph.add_node("route", _as_delta_node(route))
+        graph.add_node("market_agent", _as_delta_node(run_market_agent))
+        graph.add_node("news_agent", _as_delta_node(run_news_agent))
+        graph.add_node("financial_reports_agent", _as_delta_node(run_financial_agent))
+        graph.add_node("merge", _as_delta_node(merge))
+        graph.add_node("synthesize", _as_delta_node(synthesize))
 
         graph.add_edge(START, "classify")
         graph.add_edge("classify", "route")
-        graph.add_edge("route", "execute_tools")
-        graph.add_edge("execute_tools", "merge")
+        graph.add_conditional_edges("route", _route_to_agent_nodes)
+        graph.add_edge("market_agent", "merge")
+        graph.add_edge("news_agent", "merge")
+        graph.add_edge("financial_reports_agent", "merge")
         graph.add_edge("merge", "synthesize")
         graph.add_edge("synthesize", END)
         return cast(_WorkflowRunner, graph.compile())
@@ -216,6 +220,54 @@ def _run_sequential_pipeline(initial_state: OrchestrationState) -> Orchestration
         update = node(state)
         state = _apply_update(state, update)
     return state
+
+
+def _route_to_agent_nodes(state: OrchestrationState) -> list[str]:
+    """Fan out from router to the selected agent nodes, then join at merge."""
+
+    selected_tools = {
+        str(item).strip().lower()
+        for item in (state.get("selected_tools") or [])
+        if str(item).strip()
+    }
+    destinations: list[str] = []
+    if "market" in selected_tools:
+        destinations.append("market_agent")
+    if "news" in selected_tools:
+        destinations.append("news_agent")
+    if "financial" in selected_tools or "financial_reports" in selected_tools:
+        destinations.append("financial_reports_agent")
+    return destinations or ["merge"]
+
+
+def _as_delta_node(node: Callable[[OrchestrationState], dict[str, Any]]) -> Callable[[OrchestrationState], dict[str, Any]]:
+    """Return only reducer-friendly deltas for LangGraph state channels."""
+
+    def _wrapped(state: OrchestrationState) -> dict[str, Any]:
+        update = dict(node(state))
+        if "trace" in update:
+            update["trace"] = _list_delta(state.get("trace", []), update["trace"])
+        if "errors" in update:
+            update["errors"] = _list_delta(state.get("errors", []), update["errors"])
+        if "metadata" in update:
+            update["metadata"] = _metadata_delta(state.get("metadata", {}), update["metadata"])
+        return update
+
+    return _wrapped
+
+
+def _list_delta(before: Any, after: Any) -> list[Any]:
+    before_list = list(before or []) if isinstance(before, list) else []
+    after_list = list(after or []) if isinstance(after, list) else []
+    if len(after_list) >= len(before_list) and after_list[: len(before_list)] == before_list:
+        return after_list[len(before_list) :]
+    return after_list
+
+
+def _metadata_delta(before: Any, after: Any) -> dict[str, Any]:
+    before_dict = dict(before or {}) if isinstance(before, dict) else {}
+    after_dict = dict(after or {}) if isinstance(after, dict) else {}
+    return {key: value for key, value in after_dict.items() if before_dict.get(key) != value}
 
 
 def _execute_selected_tools(state: OrchestrationState) -> dict[str, Any]:

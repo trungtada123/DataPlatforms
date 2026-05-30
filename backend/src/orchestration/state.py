@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+import operator
+from typing import Annotated, Any, TypedDict
 
 from src.schemas.orchestration import AgentResult
+
+
+def merge_metadata(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    """Merge metadata updates emitted by parallel LangGraph branches."""
+
+    merged = dict(left or {})
+    for key, value in (right or {}).items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            nested = dict(merged[key])
+            nested.update(value)
+            merged[key] = nested
+        else:
+            merged[key] = value
+    return merged
 
 
 class OrchestrationState(TypedDict):
@@ -20,9 +35,9 @@ class OrchestrationState(TypedDict):
     financial_result: AgentResult | None
     merged_context: str | None
     final_answer: str | None
-    trace: list[dict[str, Any]]
-    errors: list[str]
-    metadata: dict[str, Any]
+    trace: Annotated[list[dict[str, Any]], operator.add]
+    errors: Annotated[list[str], operator.add]
+    metadata: Annotated[dict[str, Any], merge_metadata]
 
 
 def build_initial_state(
@@ -48,4 +63,3 @@ def build_initial_state(
         errors=[],
         metadata=dict(metadata or {}),
     )
-

@@ -63,6 +63,34 @@ $body = @{ question = "Gia cua HPG gan day the nao?" } | ConvertTo-Json
 Invoke-RestMethod -Uri "http://localhost:8000/query" -Method Post -ContentType "application/json" -Body $body
 ```
 
+## News/Web Crawl
+
+The news branch follows:
+
+```text
+Query search -> DuckDuckGo -> Crawl4AI -> MinIO/local artifact cache -> Gemini/Groq LLM
+```
+
+Runtime behavior:
+
+- DuckDuckGo can fetch up to `NEWS_SEARCH_CANDIDATE_LIMIT` candidates.
+- The service canonicalizes and deduplicates URLs, sorts by `published_at` when available, then selects at most `NEWS_MAX_ARTICLES_TO_CRAWL=5`.
+- PostgreSQL stores global article metadata in `news_article_cache`, keyed by unique `url_hash`.
+- Article content is stored as JSON at `news/articles/{url_hash}/content.json` in MinIO or local storage.
+- If a later query returns the same canonical URL, the service reads cached content and does not call Crawl4AI again.
+- LLM summaries are generated at query time from cached/crawled content; summary text is not required as a durable cache.
+
+Useful env values:
+
+```text
+NEWS_SEARCH_CANDIDATE_LIMIT=20
+NEWS_MAX_ARTICLES_TO_CRAWL=5
+NEWS_STORAGE_BACKEND=minio
+NEWS_MINIO_BUCKET=news-artifacts
+NEWS_MINIO_PREFIX=news
+NEWS_CACHE_TTL_HOURS=24
+```
+
 ## Frontend
 
 The demo UI lives in `frontend/` and calls the FastAPI backend configured by

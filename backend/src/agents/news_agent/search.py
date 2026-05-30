@@ -158,7 +158,7 @@ class DuckDuckGoNewsSearch:
         except ImportError as exc:  # pragma: no cover - phụ thuộc runtime ngoài.
             raise RuntimeError("ddgs is required for news search. Please install `ddgs`.") from exc
 
-        target_count = min(max_results or self.settings.max_search_results, self.settings.max_articles_to_crawl)
+        target_count = max_results or self.settings.max_search_results
         entity_tokens = self._extract_entity_tokens(question)
         timelimit = infer_timelimit(question)
         query_candidates = self._build_query_candidates(question)

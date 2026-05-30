@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 
@@ -83,11 +85,60 @@ def content_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def news_content_object_key(url_hash_value: str, *, prefix: str = "news") -> str:
+    """Return the stable object key for cached article content."""
+
+    normalized_prefix = prefix.strip().strip("/") or "news"
+    return f"{normalized_prefix}/articles/{url_hash_value}/content.json"
+
+
+@dataclass(slots=True)
+class NewsArticleCacheRecord:
+    """Global cache metadata keyed by canonical article URL."""
+
+    id: str
+    title: str
+    url: str
+    canonical_url: str
+    url_hash: str
+    source_domain: str
+    published_at: str | None
+    crawled_at: Any | None
+    content_key: str | None
+    content_hash: str | None
+    status: str
+    created_at: Any | None = None
+    updated_at: Any | None = None
+
+
+class ArticleArtifactStorage(Protocol):
+    """Storage backend for cached article content JSON."""
+
+    def write_article_content(self, url_hash_value: str, payload: dict[str, Any]) -> str: ...
+
+    def read_article_content(self, content_key: str) -> dict[str, Any]: ...
+
+
 class LocalArtifactStorage:
     """Filesystem storage dùng cho dev mode của news tool."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, prefix: str = "news") -> None:
         self.root = root
+        self.prefix = prefix.strip().strip("/") or "news"
+
+    def write_article_content(self, url_hash_value: str, payload: dict[str, Any]) -> str:
+        """Write canonical article content JSON using the global URL cache key."""
+
+        object_key = news_content_object_key(url_hash_value, prefix=self.prefix)
+        path = self.root / object_key
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        return object_key
+
+    def read_article_content(self, content_key: str) -> dict[str, Any]:
+        """Read cached article content JSON from local filesystem."""
+
+        return json.loads((self.root / content_key).read_text(encoding="utf-8"))
 
     def persist_article_artifacts(
         self,
@@ -133,6 +184,75 @@ class LocalArtifactStorage:
     def _write_json(self, path: Path, payload: dict[str, Any]) -> str | None:
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         return str(path.relative_to(self.root))
+
+
+class MinioArtifactStorage:
+    """MinIO storage backend for cached news article content."""
+
+    def __init__(
+        self,
+        *,
+        endpoint: str,
+        access_key: str,
+        secret_key: str,
+        secure: bool,
+        bucket: str,
+        prefix: str = "news",
+        client: Any | None = None,
+    ) -> None:
+        from src.core.minio_client import ensure_bucket, get_minio_client
+
+        self.bucket = bucket
+        self.prefix = prefix.strip().strip("/") or "news"
+        self.client = client or get_minio_client(
+            endpoint=endpoint,
+            access_key=access_key,
+            secret_key=secret_key,
+            secure=secure,
+        )
+        ensure_bucket(bucket, client=self.client)
+
+    def write_article_content(self, url_hash_value: str, payload: dict[str, Any]) -> str:
+        """Write canonical article content JSON to MinIO."""
+
+        from src.core.minio_client import upload_bytes
+
+        object_key = news_content_object_key(url_hash_value, prefix=self.prefix)
+        data = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        upload_bytes(
+            self.bucket,
+            object_key,
+            data,
+            content_type="application/json",
+            client=self.client,
+        )
+        return object_key
+
+    def read_article_content(self, content_key: str) -> dict[str, Any]:
+        """Read cached article content JSON from MinIO."""
+
+        from src.core.minio_client import download_bytes
+
+        data = download_bytes(self.bucket, content_key, client=self.client)
+        return json.loads(data.decode("utf-8"))
+
+
+def build_article_storage(settings: Any) -> ArticleArtifactStorage:
+    """Build the configured article-content storage backend."""
+
+    backend = str(getattr(settings, "storage_backend", "filesystem")).lower()
+    if backend == "local":
+        backend = "filesystem"
+    if backend == "minio":
+        return MinioArtifactStorage(
+            endpoint=os.getenv("MINIO_ENDPOINT", "minio:9000").strip(),
+            access_key=os.getenv("MINIO_ACCESS_KEY", "").strip(),
+            secret_key=os.getenv("MINIO_SECRET_KEY", "").strip(),
+            secure=os.getenv("MINIO_SECURE", "false").strip().lower() in {"1", "true", "yes"},
+            bucket=getattr(settings, "minio_bucket", "news-artifacts"),
+            prefix=getattr(settings, "minio_prefix", "news"),
+        )
+    return LocalArtifactStorage(getattr(settings, "artifact_root"), prefix=getattr(settings, "minio_prefix", "news"))
 
 
 """PostgreSQL metadata schema cho news tool."""
@@ -217,6 +337,27 @@ NEWS_DDL_STATEMENTS: list[str] = [
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS news_article_cache (
+        id VARCHAR(32) PRIMARY KEY,
+        title TEXT NOT NULL,
+        url TEXT NOT NULL,
+        canonical_url TEXT NOT NULL,
+        url_hash VARCHAR(64) NOT NULL UNIQUE,
+        source_domain VARCHAR(255) NOT NULL,
+        published_at TEXT,
+        crawled_at TIMESTAMPTZ,
+        content_key TEXT,
+        content_hash VARCHAR(64),
+        status VARCHAR(32) NOT NULL DEFAULT 'pending',
+        error_message TEXT,
+        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_news_article_cache_domain_published ON news_article_cache (source_domain, published_at)",
+    "CREATE INDEX IF NOT EXISTS idx_news_article_cache_status_updated ON news_article_cache (status, updated_at DESC)",
 ]
 
 
@@ -574,6 +715,219 @@ def fetch_news_article_detail(article_id: str, *, engine: Engine | None = None) 
         query_id=row["query_id"],
         run_id=row["run_id"],
         extracted_payload=_from_json(row["extracted_payload"]),
+    )
+
+
+def get_article_by_url_hash(url_hash_value: str, *, engine: Engine | None = None) -> NewsArticleCacheRecord | None:
+    """Fetch one globally cached article by URL hash."""
+
+    records = get_articles_by_url_hashes([url_hash_value], engine=engine)
+    return records.get(url_hash_value)
+
+
+def get_articles_by_url_hashes(
+    url_hashes: list[str],
+    *,
+    engine: Engine | None = None,
+) -> dict[str, NewsArticleCacheRecord]:
+    """Fetch globally cached articles for the requested URL hashes."""
+
+    if not url_hashes:
+        return {}
+    active_engine = engine or get_engine()
+    with active_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT
+                    id,
+                    title,
+                    url,
+                    canonical_url,
+                    url_hash,
+                    source_domain,
+                    published_at,
+                    crawled_at,
+                    content_key,
+                    content_hash,
+                    status,
+                    created_at,
+                    updated_at
+                FROM news_article_cache
+                WHERE url_hash = ANY(:url_hashes)
+                """
+            ),
+            {"url_hashes": list(url_hashes)},
+        ).mappings()
+        return {str(row["url_hash"]): _cache_record_from_row(row) for row in rows}
+
+
+def upsert_article_metadata(
+    *,
+    title: str,
+    url: str,
+    canonical_url: str,
+    url_hash_value: str,
+    source_domain: str,
+    published_at: str | None,
+    status: str = "pending",
+    metadata: dict[str, Any] | None = None,
+    engine: Engine | None = None,
+) -> NewsArticleCacheRecord:
+    """Insert or lightly update global article metadata by URL hash."""
+
+    active_engine = engine or get_engine()
+    article_id = uuid4().hex
+    with active_engine.begin() as connection:
+        row = connection.execute(
+            text(
+                """
+                INSERT INTO news_article_cache (
+                    id, title, url, canonical_url, url_hash, source_domain,
+                    published_at, status, metadata
+                )
+                VALUES (
+                    :id, :title, :url, :canonical_url, :url_hash, :source_domain,
+                    :published_at, :status, CAST(:metadata AS JSONB)
+                )
+                ON CONFLICT (url_hash) DO UPDATE SET
+                    title = COALESCE(NULLIF(EXCLUDED.title, ''), news_article_cache.title),
+                    url = EXCLUDED.url,
+                    canonical_url = EXCLUDED.canonical_url,
+                    source_domain = EXCLUDED.source_domain,
+                    published_at = COALESCE(EXCLUDED.published_at, news_article_cache.published_at),
+                    metadata = news_article_cache.metadata || EXCLUDED.metadata,
+                    updated_at = NOW()
+                RETURNING id, title, url, canonical_url, url_hash, source_domain, published_at,
+                    crawled_at, content_key, content_hash, status, created_at, updated_at
+                """
+            ),
+            {
+                "id": article_id,
+                "title": title,
+                "url": url,
+                "canonical_url": canonical_url,
+                "url_hash": url_hash_value,
+                "source_domain": source_domain,
+                "published_at": published_at,
+                "status": status,
+                "metadata": _to_json(metadata or {}),
+            },
+        ).mappings().one()
+    return _cache_record_from_row(row)
+
+
+def update_article_content_key(
+    *,
+    url_hash_value: str,
+    content_key: str,
+    content_hash_value: str,
+    status: str = "crawled",
+    engine: Engine | None = None,
+) -> None:
+    """Mark a global article cache row as crawled and point it at stored content."""
+
+    active_engine = engine or get_engine()
+    with active_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                UPDATE news_article_cache
+                SET
+                    content_key = :content_key,
+                    content_hash = :content_hash,
+                    status = :status,
+                    crawled_at = NOW(),
+                    error_message = NULL,
+                    updated_at = NOW()
+                WHERE url_hash = :url_hash
+                """
+            ),
+            {
+                "url_hash": url_hash_value,
+                "content_key": content_key,
+                "content_hash": content_hash_value,
+                "status": status,
+            },
+        )
+
+
+def mark_article_failed(
+    *,
+    url_hash_value: str,
+    error_message: str,
+    engine: Engine | None = None,
+) -> None:
+    """Mark one global article cache row as failed."""
+
+    active_engine = engine or get_engine()
+    with active_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                UPDATE news_article_cache
+                SET status = 'failed', error_message = :error_message, updated_at = NOW()
+                WHERE url_hash = :url_hash
+                """
+            ),
+            {"url_hash": url_hash_value, "error_message": error_message},
+        )
+
+
+def list_recent_articles_by_query_or_ticker(
+    *,
+    term: str,
+    limit: int = 5,
+    engine: Engine | None = None,
+) -> list[NewsArticleCacheRecord]:
+    """Return recent cached article metadata matching a simple title/url term."""
+
+    active_engine = engine or get_engine()
+    pattern = f"%{term.strip()}%"
+    with active_engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT
+                    id,
+                    title,
+                    url,
+                    canonical_url,
+                    url_hash,
+                    source_domain,
+                    published_at,
+                    crawled_at,
+                    content_key,
+                    content_hash,
+                    status,
+                    created_at,
+                    updated_at
+                FROM news_article_cache
+                WHERE title ILIKE :pattern OR canonical_url ILIKE :pattern
+                ORDER BY COALESCE(crawled_at, updated_at, created_at) DESC
+                LIMIT :limit
+                """
+            ),
+            {"pattern": pattern, "limit": limit},
+        ).mappings()
+        return [_cache_record_from_row(row) for row in rows]
+
+
+def _cache_record_from_row(row: Any) -> NewsArticleCacheRecord:
+    return NewsArticleCacheRecord(
+        id=str(row["id"]),
+        title=str(row["title"]),
+        url=str(row["url"]),
+        canonical_url=str(row["canonical_url"]),
+        url_hash=str(row["url_hash"]),
+        source_domain=str(row["source_domain"]),
+        published_at=row["published_at"],
+        crawled_at=row["crawled_at"],
+        content_key=row["content_key"],
+        content_hash=row["content_hash"],
+        status=str(row["status"]),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
     )
 
 

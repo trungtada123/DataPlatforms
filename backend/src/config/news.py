@@ -55,6 +55,10 @@ class NewsSettings:
     groq_api_key: str
     groq_api_keys: list[str]
     timezone: str
+    minio_bucket: str = "news-artifacts"
+    minio_prefix: str = "news"
+    search_candidate_limit: int = 20
+    cache_ttl_hours: int = 24
 
     @property
     def tzinfo(self) -> ZoneInfo:
@@ -78,10 +82,14 @@ def get_news_settings(settings: object | None = None) -> NewsSettings:
     settings = NewsSettings(
         storage_backend=os.getenv("NEWS_STORAGE_BACKEND", "filesystem").strip().lower() or "filesystem",
         artifact_root=artifact_root,
+        minio_bucket=os.getenv("NEWS_MINIO_BUCKET", "news-artifacts").strip() or "news-artifacts",
+        minio_prefix=os.getenv("NEWS_MINIO_PREFIX", "news").strip().strip("/") or "news",
         trusted_sites=split_news_csv(os.getenv("NEWS_TRUSTED_SITES"), DEFAULT_TRUSTED_SITES),
         max_search_results=int(os.getenv("NEWS_MAX_SEARCH_RESULTS", "5")),
+        search_candidate_limit=int(os.getenv("NEWS_SEARCH_CANDIDATE_LIMIT", "20")),
         max_results_per_site=int(os.getenv("NEWS_MAX_RESULTS_PER_SITE", "2")),
         max_articles_to_crawl=int(os.getenv("NEWS_MAX_ARTICLES_TO_CRAWL", "5")),
+        cache_ttl_hours=int(os.getenv("NEWS_CACHE_TTL_HOURS", "24")),
         crawl_timeout_ms=int(os.getenv("NEWS_CRAWL_TIMEOUT_MS", "20000")),
         crawl_word_count_threshold=int(os.getenv("NEWS_CRAWL_WORD_COUNT_THRESHOLD", "80")),
         max_article_chars=int(os.getenv("NEWS_MAX_ARTICLE_CHARS", "5000")),
@@ -103,16 +111,24 @@ def get_news_settings(settings: object | None = None) -> NewsSettings:
 
     if settings.max_search_results <= 0:
         raise ValueError("NEWS_MAX_SEARCH_RESULTS must be positive.")
+    if settings.search_candidate_limit <= 0:
+        raise ValueError("NEWS_SEARCH_CANDIDATE_LIMIT must be positive.")
     if settings.max_results_per_site <= 0:
         raise ValueError("NEWS_MAX_RESULTS_PER_SITE must be positive.")
     if settings.max_articles_to_crawl <= 0:
         raise ValueError("NEWS_MAX_ARTICLES_TO_CRAWL must be positive.")
+    if settings.cache_ttl_hours <= 0:
+        raise ValueError("NEWS_CACHE_TTL_HOURS must be positive.")
     if settings.crawl_timeout_ms <= 0:
         raise ValueError("NEWS_CRAWL_TIMEOUT_MS must be positive.")
     if settings.crawl_word_count_threshold < 0:
         raise ValueError("NEWS_CRAWL_WORD_COUNT_THRESHOLD must be non-negative.")
     if settings.max_article_chars <= 100:
         raise ValueError("NEWS_MAX_ARTICLE_CHARS must be larger than 100.")
+    if settings.storage_backend == "local":
+        settings.storage_backend = "filesystem"
+    if settings.storage_backend not in {"filesystem", "minio"}:
+        raise ValueError("NEWS_STORAGE_BACKEND must be one of: filesystem, local, minio.")
     if settings.summary_provider not in {"groq", "gemini", "fallback"}:
         raise ValueError("NEWS_SUMMARIZER_PROVIDER must be one of: groq, gemini, fallback.")
     return settings
